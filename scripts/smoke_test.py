@@ -1,4 +1,4 @@
-"""Minimal TCP/RESP smoke test for a running Cycle 1 server."""
+"""Minimal TCP/RESP smoke test for a running Cycle 2 server."""
 
 from __future__ import annotations
 
@@ -81,9 +81,17 @@ def send_raw_payload(host: str, port: int, timeout: float, payload: bytes) -> by
 
 def run_smoke_test(host: str, port: int, timeout: float = 1.0) -> None:
     assert send_command(host, port, timeout, ["PING"]) == b"+PONG\r\n"
+    send_command(host, port, timeout, ["DEL", "smoke:key"])
+    send_command(host, port, timeout, ["DEL", "smoke:counter"])
     assert send_command(host, port, timeout, ["SET", "smoke:key", "value"]) == b"+OK\r\n"
     assert send_command(host, port, timeout, ["GET", "smoke:key"]) == b"$5\r\nvalue\r\n"
+    assert send_command(host, port, timeout, ["EXISTS", "smoke:key"]) == b":1\r\n"
+    assert send_command(host, port, timeout, ["INCR", "smoke:counter"]) == b":1\r\n"
+    assert send_command(host, port, timeout, ["INCR", "smoke:counter"]) == b":2\r\n"
+    assert send_command(host, port, timeout, ["DECR", "smoke:counter"]) == b":1\r\n"
+    assert send_command(host, port, timeout, ["GET", "smoke:counter"]) == b"$1\r\n1\r\n"
     assert send_command(host, port, timeout, ["DEL", "smoke:key"]) == b":1\r\n"
+    assert send_command(host, port, timeout, ["EXISTS", "smoke:key"]) == b":0\r\n"
     assert send_command(host, port, timeout, ["GET", "smoke:key"]) == b"$-1\r\n"
     assert send_command(host, port, timeout, ["BOGUS"]) == b"-ERR unknown command 'BOGUS'\r\n"
     assert send_raw_payload(host, port, timeout, b"*1\r\n$bad\r\nPING\r\n") == b"-ERR protocol error\r\n"

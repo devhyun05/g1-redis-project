@@ -1,3 +1,5 @@
+import pytest
+
 from src.storage.store import Store
 
 
@@ -38,3 +40,53 @@ def test_delete_returns_zero_for_missing_key() -> None:
     store = Store()
 
     assert store.delete("missing") == 0
+
+
+def test_expire_returns_zero_for_missing_key() -> None:
+    store = Store()
+
+    assert store.expire("missing", 3) == 0
+
+
+def test_expire_keeps_value_available_before_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = Store()
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 100.0)
+    store.set("session", "abc123")
+
+    assert store.expire("session", 3) == 1
+
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 102.0)
+    assert store.get("session") == "abc123"
+
+
+def test_get_returns_none_after_expiration(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = Store()
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 100.0)
+    store.set("session", "abc123")
+    store.expire("session", 3)
+
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 104.0)
+    assert store.get("session") is None
+
+
+def test_delete_returns_zero_for_expired_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = Store()
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 100.0)
+    store.set("session", "abc123")
+    store.expire("session", 3)
+
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 104.0)
+    assert store.delete("session") == 0
+
+
+def test_set_clears_existing_expiration(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = Store()
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 100.0)
+    store.set("session", "first")
+    store.expire("session", 3)
+
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 101.0)
+    store.set("session", "second")
+
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 110.0)
+    assert store.get("session") == "second"
