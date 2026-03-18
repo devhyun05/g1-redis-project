@@ -231,6 +231,8 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 
 ## Development Cycles
 
+<img width="1776" height="1082" alt="image" src="https://github.com/user-attachments/assets/278be6b2-ae4e-493b-8f03-a8e8d75b1f1f" />
+
 ![Cycle 1 to 3 development plan](docs/cycle-1-3-figma-board.svg)
 
 ## Quality Control (QC)
