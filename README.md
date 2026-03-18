@@ -234,8 +234,7 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 
 ## Development Cycles
 
-<img width="1776" height="1082" alt="image" src="https://github.com/user-attachments/assets/278be6b2-ae4e-493b-8f03-a8e8d75b1f1f" />
-
+<img width="1264" height="788" alt="image" src="https://github.com/user-attachments/assets/2b9dcb2f-84e8-46a0-94d6-7b8c293fd6ec" />
 
 ## Quality Control (QC)
 
