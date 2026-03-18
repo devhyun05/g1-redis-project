@@ -105,11 +105,15 @@ class TcpServer:
                     try:
                         tokens = self.parse_request(extraction.frame)
                         response = self.handle_command(tokens, self.store)
-                        if self.persist_command is not None:
-                            self.persist_command(tokens, response)
                         payload = self.encode_response(response)
                     except Exception:  # noqa: BLE001
                         payload = b"-ERR internal server error\r\n"
+                    else:
+                        if self.persist_command is not None:
+                            try:
+                                self.persist_command(tokens, response)
+                            except Exception:  # noqa: BLE001
+                                payload = b"-ERR internal server error\r\n"
 
                     if not await _write_payload(writer, payload):
                         return
