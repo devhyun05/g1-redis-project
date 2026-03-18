@@ -351,6 +351,7 @@ Cycle 1에서는 위 구조를 기본안으로 사용하고, Cycle 2 이후 필�
 - 자동 테스트와 스모크 테스트를 분리한다.
 - Docker 실행 경로를 맞춘다.
 - PR 전 CI 검증 기준을 굳힌다.
+- Cycle 1 이후 기능 확장(EXISTS/INCR/DECR, TTL)을 충돌 없이 병렬 진행한다.
 
 산출물:
 
@@ -358,6 +359,128 @@ Cycle 1에서는 위 구조를 기본안으로 사용하고, Cycle 2 이후 필�
 - 로컬 스모크 테스트
 - Docker 테스트 흐름
 - CI 초안과 PR 검증 규칙
+
+#### Cycle 2 Role Ownership
+
+Cycle 2에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한다.
+
+##### A. CI / Docker / 실행환경 (이현성)
+
+목표:
+
+- 팀 공통 실행 기준과 자동 검증 기준 고정
+
+담당 파일:
+
+- `.github/workflows/ci.yml`
+- `Dockerfile`
+- `.dockerignore`
+- `.env.example`
+- `Makefile`
+- `docs/testing.md`
+
+담당 내용:
+
+- GitHub Actions CI 구성
+- Docker build/test/smoke 흐름 고정
+- 공통 실행 명령 확정
+- 환경변수 템플릿 정리
+
+제외:
+
+- `src/` 비즈니스 로직 수정 금지
+
+##### B. 서버 연결 유지 / 다중 요청 처리 (위승철)
+
+목표:
+
+- 서버를 "한 번 요청 받고 끊는 구조"에서 실사용 가능한 연결 모델로 개선
+
+담당 파일:
+
+- `src/server/tcp_server.py`
+- 필요 시 `tests/integration/test_server_connection.py` 신규 생성
+
+담당 내용:
+
+- persistent connection
+- 한 연결에서 여러 요청 처리
+- recv loop / buffer 처리
+- 연결 종료/예외 처리 보강
+
+제외:
+
+- 명령 구현 수정 금지
+- 저장소 구조 수정 금지
+
+##### C. 추가 명령 기능 (이규정)
+
+목표:
+
+- 데모 효과가 큰 Redis 명령 확장
+
+담당 파일:
+
+- `src/commands/handler.py`
+- 필요 시 `tests/integration/test_extended_commands.py` 신규 생성
+
+담당 내용:
+
+- `EXISTS`
+- `INCR`
+- 시간 여유 시 `DECR`
+- 시간 여유 시 리스트 명령 최소 구현
+
+제외:
+
+- 서버 연결 처리 수정 금지
+- storage 내부 구조 대수술 금지
+
+##### D. 저장소 / TTL / 스모크/문서 마감 (이재혁)
+
+목표:
+
+- Redis다운 저장 동작(TTL 포함) 추가와 최종 검증 마감
+
+담당 파일:
+
+- `src/storage/store.py`
+- `tests/unit/test_store.py`
+- `tests/smoke/test_server_smoke.py`
+- `scripts/smoke_test.py`
+- `README.md`
+
+담당 내용:
+
+- TTL/만료 구조 설계 및 구현
+- 필요 시 `EXPIRE` 지원용 저장소 기반 마련
+- smoke 시나리오 갱신
+- 최종 사용법/실행법 문서화
+
+제외:
+
+- CI 파일 수정 금지
+- 서버 연결 처리 수정 금지
+
+#### Cycle 2 Integration Order
+
+Cycle 2 우선 작업 순서는 아래를 따른다.
+
+1. A가 `ci.yml`과 Docker 실행 흐름을 먼저 완성한다.
+2. A가 실행/테스트 기준을 팀에 공유한다.
+3. 팀 전원이 동일한 로컬 실행 환경을 맞춘다.
+4. 이후 A/B/C/D가 병렬 개발을 진행한다.
+5. 각 작업자는 `dev` 대상 PR을 올린다.
+6. `dev`에서 통합 테스트를 수행한다.
+7. 안정화가 끝나면 `dev -> main` PR로 승격한다.
+
+#### Cycle 2 Anti-Conflict Guideline
+
+- A는 infra/docs 축에 집중한다.
+- B는 `server` 축에 집중한다.
+- C는 `commands` 축에 집중한다.
+- D는 `storage + smoke + README` 축에 집중한다.
+- 공용 인터페이스 변경이 필요하면 코드 선변경 대신 문서/팀 합의부터 진행한다.
 
 ### Cycle 3. Extension and Demo Readiness
 
