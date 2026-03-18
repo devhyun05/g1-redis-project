@@ -10,7 +10,7 @@ EncoderFunc = Callable[[Any], bytes]
 
 
 class TcpServer:
-    """Cycle 1 runtime server: accept one request and return one response."""
+    """Cycle 1 runtime server: accept a connection and handle sequential requests."""
 
     def __init__(
         self,
@@ -63,26 +63,25 @@ class TcpServer:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
-        payload = b""
-
         try:
-            data = await reader.read(self.read_size)
-            if not data:
-                return
+            while True:
+                data = await reader.read(self.read_size)
+                if not data:
+                    break
 
-            tokens = self.parse_request(data)
-            response = self.handle_command(tokens, self.store)
-            payload = self.encode_response(response)
-        except Exception:  # noqa: BLE001
-            payload = b"-ERR internal server error\r\n"
-        finally:
-            if payload:
+                try:
+                    tokens = self.parse_request(data)
+                    response = self.handle_command(tokens, self.store)
+                    payload = self.encode_response(response)
+                except Exception:  # noqa: BLE001
+                    payload = b"-ERR internal server error\r\n"
+
                 writer.write(payload)
                 try:
                     await writer.drain()
-                except ConnectionResetError:
-                    pass
-
+                except (BrokenPipeError, ConnectionResetError):
+                    break
+        finally:
             writer.close()
             try:
                 await writer.wait_closed()

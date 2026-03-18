@@ -107,7 +107,7 @@ Docker 명령:
 
 - 서버 기동 확인: `Mini Redis server listening on <host>:<port>`
 - 수동 명령 검증 도구: `nc`
-- 현재 서버 계약: 한 TCP 연결당 한 요청 처리
+- 현재 서버 계약: 한 TCP 연결에서 여러 요청을 순차 처리
 
 예시:
 
