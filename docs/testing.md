@@ -60,7 +60,7 @@ make smoke-local
 현재 기준 메모:
 
 - smoke는 이미 떠 있는 로컬 서버에 붙는다.
-- 현재 서버 계약은 한 TCP 연결당 한 요청 처리다.
+- 현재 서버 계약은 한 TCP 연결에서 여러 RESP 요청을 순차 처리하는 것이다.
 - smoke 스크립트는 명령마다 새 연결을 열어 검증한다.
 
 ### 3. Docker Automated Tests
@@ -178,7 +178,8 @@ UI가 없기 때문에 시각 검증은 브라우저 화면이 아니라 터미�
 - 서버 로그: `Mini Redis server listening on <host>:<port>`
 - 수동 검증 도구: `nc`
 - 명령은 inline 텍스트가 아니라 RESP payload로 보낸다.
-- 현재 smoke/manual 검증은 명령마다 새 TCP 연결을 사용한다.
+- 서버 자체는 한 TCP 연결에서 여러 요청을 처리한다.
+- 현재 smoke 스크립트와 대부분의 manual 검증 예시는 명령마다 새 TCP 연결을 사용한다.
 
 ## Maintenance Rules
 

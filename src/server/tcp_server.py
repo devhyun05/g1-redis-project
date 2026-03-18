@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from typing import Any, Callable, Literal, NamedTuple
 
 
 ParserFunc = Callable[[bytes], list[str]]
 CommandHandlerFunc = Callable[[list[str], Any], Any]
 EncoderFunc = Callable[[Any], bytes]
+FrameStatus = Literal["complete", "incomplete", "malformed"]
+
+CRLF = b"\r\n"
+
+
+class _FrameExtraction(NamedTuple):
+    status: FrameStatus
+    frame: bytes | None = None
 
 
 class TcpServer:
@@ -63,6 +71,8 @@ class TcpServer:
         reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
+        buffer = bytearray()
+
         try:
             while True:
                 try:
@@ -72,21 +82,113 @@ class TcpServer:
                 if not data:
                     break
 
-                try:
-                    tokens = self.parse_request(data)
-                    response = self.handle_command(tokens, self.store)
-                    payload = self.encode_response(response)
-                except Exception:  # noqa: BLE001
-                    payload = b"-ERR internal server error\r\n"
+                buffer.extend(data)
 
-                writer.write(payload)
-                try:
-                    await writer.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    break
+                # Drain every complete RESP frame currently buffered before reading again.
+                while buffer:
+                    extraction = _extract_request_frame(buffer)
+
+                    if extraction.status == "incomplete":
+                        break
+
+                    if extraction.status == "malformed":
+                        buffer.clear()
+                        if not await _write_payload(writer, b"-ERR protocol error\r\n"):
+                            return
+                        break
+
+                    assert extraction.frame is not None
+
+                    try:
+                        tokens = self.parse_request(extraction.frame)
+                        response = self.handle_command(tokens, self.store)
+                        payload = self.encode_response(response)
+                    except Exception:  # noqa: BLE001
+                        payload = b"-ERR internal server error\r\n"
+
+                    if not await _write_payload(writer, payload):
+                        return
         finally:
             writer.close()
             try:
                 await writer.wait_closed()
             except OSError:
                 pass
+
+
+async def _write_payload(
+    writer: asyncio.StreamWriter,
+    payload: bytes,
+) -> bool:
+    writer.write(payload)
+
+    try:
+        await writer.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        return False
+
+    return True
+
+
+def _extract_request_frame(buffer: bytearray) -> _FrameExtraction:
+    if not buffer:
+        return _FrameExtraction("incomplete")
+
+    position = 0
+    array_header = _read_line(buffer, position)
+    if array_header is None:
+        return _FrameExtraction("incomplete")
+
+    array_line, position = array_header
+    if not array_line.startswith(b"*"):
+        return _FrameExtraction("malformed")
+
+    item_count = _parse_non_negative_int(array_line[1:])
+    if item_count is None or item_count == 0:
+        return _FrameExtraction("malformed")
+
+    for _ in range(item_count):
+        bulk_header = _read_line(buffer, position)
+        if bulk_header is None:
+            return _FrameExtraction("incomplete")
+
+        bulk_line, position = bulk_header
+        if not bulk_line.startswith(b"$"):
+            return _FrameExtraction("malformed")
+
+        bulk_length = _parse_non_negative_int(bulk_line[1:])
+        if bulk_length is None:
+            return _FrameExtraction("malformed")
+
+        payload_end = position + bulk_length
+        if payload_end + len(CRLF) > len(buffer):
+            return _FrameExtraction("incomplete")
+
+        if buffer[payload_end:payload_end + len(CRLF)] != CRLF:
+            return _FrameExtraction("malformed")
+
+        position = payload_end + len(CRLF)
+
+    frame = bytes(buffer[:position])
+    del buffer[:position]
+    return _FrameExtraction("complete", frame)
+
+
+def _read_line(buffer: bytearray, position: int) -> tuple[bytes, int] | None:
+    line_end = buffer.find(CRLF, position)
+    if line_end == -1:
+        return None
+
+    return bytes(buffer[position:line_end]), line_end + len(CRLF)
+
+
+def _parse_non_negative_int(raw_value: bytes) -> int | None:
+    try:
+        value = int(raw_value)
+    except ValueError:
+        return None
+
+    if value < 0:
+        return None
+
+    return value

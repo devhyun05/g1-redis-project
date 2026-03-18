@@ -166,6 +166,15 @@ printf '*2\r\n$3\r\nGET\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 ```
 
+한 연결에서 여러 요청을 보내는 예시:
+
+```bash
+(
+  printf '*1\r\n$4\r\nPING\r\n'
+  printf '*1\r\n$4\r\nPING\r\n'
+) | nc 127.0.0.1 6381
+```
+
 ## Selected Collaboration Skills
 
 현재 저장소에서 협업용으로 우선 사용하는 Codex 스킬은 아래 두 개다.
