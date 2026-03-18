@@ -101,6 +101,54 @@ Docker 명령:
 - `make test-docker`: 컨테이너 안에서 `pytest`와 `ruff`를 실행한다.
 - `make smoke-docker`: 서버 컨테이너를 띄운 뒤 별도 컨테이너에서 smoke pytest를 실행한다.
 
+## EC2 Deployment (Docker)
+
+EC2에서 Mini Redis를 상시 실행하려면 아래 순서를 따른다.
+
+### 1) EC2 사전 준비
+
+- OS: Ubuntu 22.04 이상 권장
+- Docker Engine + Docker Compose Plugin 설치
+- Security Group 인바운드 규칙에 TCP `6379` 허용
+  - 권장: `0.0.0.0/0` 전체 오픈 대신 필요한 IP 대역만 허용
+
+### 2) 서버 배포
+
+```bash
+git clone git@github.com:devhyun05/g1-redis-project.git
+cd g1-redis-project
+cp .env.example .env
+./scripts/deploy_ec2.sh
+```
+
+기본값:
+
+- `REDIS_HOST=0.0.0.0`
+- `REDIS_PORT=6379`
+- docker compose `restart: unless-stopped`
+
+### 3) 수동 실행(스크립트 대신)
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f mini-redis
+```
+
+### 4) 접속 확인
+
+EC2 내부에서:
+
+```bash
+printf '*1\r\n$4\r\nPING\r\n' | nc 127.0.0.1 6379
+```
+
+로컬 개발 PC에서(보안그룹 허용 시):
+
+```bash
+printf '*1\r\n$4\r\nPING\r\n' | nc <EC2_PUBLIC_IP> 6379
+```
+
 ## Manual Verification
 
 이 프로젝트는 UI가 없는 TCP 서버라서 브라우저 기반 시각 검증 대신 터미널 출력과 RESP 응답을 확인한다.
