@@ -42,6 +42,19 @@ def test_delete_returns_zero_for_missing_key() -> None:
     assert store.delete("missing") == 0
 
 
+def test_exists_returns_false_for_missing_key() -> None:
+    store = Store()
+
+    assert store.exists("missing") is False
+
+
+def test_exists_returns_true_for_existing_key() -> None:
+    store = Store()
+    store.set("name", "redis")
+
+    assert store.exists("name") is True
+
+
 def test_expire_returns_zero_for_missing_key() -> None:
     store = Store()
 
@@ -67,6 +80,16 @@ def test_get_returns_none_after_expiration(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setattr("src.storage.store.time.time", lambda: 104.0)
     assert store.get("session") is None
+
+
+def test_exists_returns_false_after_expiration(monkeypatch: pytest.MonkeyPatch) -> None:
+    store = Store()
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 100.0)
+    store.set("session", "abc123")
+    store.expire("session", 3)
+
+    monkeypatch.setattr("src.storage.store.time.time", lambda: 104.0)
+    assert store.exists("session") is False
 
 
 def test_delete_returns_zero_for_expired_key(monkeypatch: pytest.MonkeyPatch) -> None:
