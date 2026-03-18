@@ -46,6 +46,7 @@ ci: add local smoke test job
 - 실험 또는 임시 작업: `chore/<short-name>`
 - Codex가 기본 브랜치에서 새 브랜치를 만들 때는 `codex/<short-name>`도 허용한다.
 - 각 작업 브랜치는 원격에 push 한 뒤 `dev` 브랜치로 PR을 올린다.
+- `dev`에 push 하거나 `dev` 대상 PR을 갱신하기 전에는 원격 `dev` 최신 상태를 먼저 fetch 또는 pull --rebase로 반영한다.
 - `main` 반영은 개별 작업 브랜치가 아니라 `dev -> main` PR로 진행한다.
 
 ## PR Message Reminder
