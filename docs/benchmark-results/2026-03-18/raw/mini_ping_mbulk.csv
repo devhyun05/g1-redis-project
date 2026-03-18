@@ -1,0 +1,3 @@
+WARNING: Could not fetch server CONFIG
+"test","rps","avg_latency_ms","min_latency_ms","p50_latency_ms","p95_latency_ms","p99_latency_ms","max_latency_ms"
+"PING_MBULK","73260.07","0.645","0.304","0.615","0.919","1.071","4.727"
