@@ -1,5 +1,8 @@
 # Redis Clone Team Project
 
+<img width="376" height="285" alt="image" src="https://github.com/user-attachments/assets/b8fb2830-9e2e-4230-9977-60e00b1df514" />
+
+
 AI를 활용해 하루 안에 Redis 유사 서버를 구현하는 팀 프로젝트 저장소다.
 
 저장소 주소: `https://github.com/devhyun05/g1-redis-project`
@@ -233,7 +236,6 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 
 <img width="1776" height="1082" alt="image" src="https://github.com/user-attachments/assets/278be6b2-ae4e-493b-8f03-a8e8d75b1f1f" />
 
-![Cycle 1 to 3 development plan](docs/cycle-1-3-figma-board.svg)
 
 ## Quality Control (QC)
 
@@ -271,7 +273,9 @@ PR 전에는 관련 자동 테스트와 스모크 테스트 통과를 기본 게
 - 새로운 개념도 따로 외우기보다 RESP, TTL, AOF, HashTable처럼 실제 프로젝트 코드와 테스트에 적용된 형태로 바로 이해하고 확인하면서 학습했다.
 - 팀원들 피드백 기준으로도 프롬프트 입력 방식이 협업에 큰 도움이 됐고, 특히 머지 충돌 감소와 AI 동작 제어 측면에서 효과가 컸다.
 
-![AI-assisted work timeline](docs/ai-work-timeline.svg)
+<img width="1776" height="1082" alt="image" src="https://github.com/user-attachments/assets/6e9d816a-6130-4624-b460-27db66b27958" />
+
+
 
 ## Selected Collaboration Skills
 
