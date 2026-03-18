@@ -135,9 +135,9 @@ async def run_server() -> None:
             separators=(",", ":"),
         )
     )
-    print(BANNER)
-    print(INFO_CARD)
-    print(f"Mini Redis server listening on {host}:{port}")
+    print(BANNER, flush=True)
+    print(INFO_CARD, flush=True)
+    print(f"Mini Redis server listening on {host}:{port}", flush=True)
     traffic_task = (
         asyncio.create_task(_display_traffic(traffic_stats))
         if traffic_stats is not None
