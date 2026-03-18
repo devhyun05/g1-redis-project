@@ -225,6 +225,64 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
   - `GET`: 약 `6.4k req/s`
 - malformed RESP flood, partial connection hold-open, large payload 입력을 포함한 비정상 시나리오에서도 서버가 즉시 종료되거나 응답 불능 상태로 빠지지 않는 것을 확인했다.
 
+## Performance Optimization Report (2026-03-19)
+
+아래 최적화는 EC2(`t3.micro`)에서 동일 조건(`20000 requests`, `concurrency=50`)으로 재측정했다.
+
+### 1) 원인
+
+- 요청당 JSON 로그(`LOG_REQUESTS=true`)가 hot path에서 큰 오버헤드를 만들었다.
+- AOF와 트래픽 상태 출력은 벤치마크 모드에서 불필요한 비용이다.
+
+### 2) 수정한 항목
+
+- `src/main.py`
+  - `TRAFFIC_STATS_ENABLED` 토글 추가
+  - 비활성화 시 `record_request`, 상태 라인 렌더링 task를 생성하지 않음
+- `docker-compose.yml`
+  - 컨테이너에 `AOF_ENABLED`, `AOF_PATH`, `TRAFFIC_STATS_ENABLED` 환경변수 전달
+- 벤치마크 설정(`.env`)
+  - `AOF_ENABLED=false`
+  - `TRAFFIC_STATS_ENABLED=false`
+  - `LOG_REQUESTS=false` (최종 개선 포인트)
+
+### 3) 과정
+
+1. `AOF=false`, `TRAFFIC_STATS=false`, `LOG_REQUESTS=true` 상태를 baseline으로 측정
+2. 동일 상태에서 `LOG_REQUESTS=false`로만 변경
+3. 같은 워크로드로 재측정 후 전/후 비교
+
+### 4) 결과 (Mini Redis 전/후)
+
+| Command | Before (`LOG_REQUESTS=true`) | After (`LOG_REQUESTS=false`) | 개선 배수 |
+|---|---:|---:|---:|
+| PING_MBULK | 11,771.63 rps | 31,152.65 rps | 2.65x |
+| SET | 9,280.74 rps | 33,898.30 rps | 3.65x |
+| GET | 9,713.45 rps | 28,530.67 rps | 2.94x |
+| DEL | 13,003.90 rps | 27,894.00 rps | 2.15x |
+
+핵심 해석:
+
+- 이번 실험에서는 `LOG_REQUESTS` 비활성화가 가장 큰 개선 효과를 만들었다.
+- 즉, 현재 병목은 저장소 로직보다 요청 단위 로그 출력 경로에 더 가깝다.
+
+### 5) 3-way 비교 (최적화 후)
+
+| Command | Mini Redis | Redis OSS | MySQL |
+|---|---:|---:|---:|
+| SET | 33,898.30 rps | 64,308.68 rps | 5,250.72 rps |
+| GET | 28,530.67 rps | 64,308.68 rps | 8,399.83 rps |
+| DEL | 27,894.00 rps | 59,701.49 rps | 9,017.13 rps |
+
+### 6) 해결/운영 가이드
+
+- 벤치마크/운영 기본값:
+  - `LOG_REQUESTS=false`
+  - `TRAFFIC_STATS_ENABLED=false`
+  - `AOF_ENABLED`는 목적에 따라 선택
+- 디버깅이 필요할 때만 단기간 `LOG_REQUESTS=true`로 전환
+- 성능 비교는 최소 3회 반복 측정 후 중앙값 기준으로 판단
+
 ## Functional Test Notes
 
 - `SET` 후 `GET`이 같은 값으로 정확히 반환되는 것을 확인했다.
