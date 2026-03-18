@@ -510,8 +510,8 @@ Cycle 2 우선 작업 순서는 아래를 따른다.
 Cycle 3는 구현 전에 아래 항목을 먼저 팀이 함께 짧게 합의하고 시작한다.
 
 1. 충돌 해결 방식
-   - 기본안은 `chaining`으로 간다.
-   - `open addressing`은 비교/확장 아이디어로 남기되 Cycle 3 기본 구현에는 넣지 않는다.
+   - 충돌 처리는 `separate chaining`으로 고정한다.
+   - `open addressing`은 학습/비교 주제로만 남기고 Cycle 3 기본 구현에는 넣지 않는다.
 2. HashTable 책임 범위
    - key-value 저장, 조회, 삭제, 존재 여부 확인, 필요 시 resize
 3. key/value 범위
@@ -520,6 +520,16 @@ Cycle 3는 구현 전에 아래 항목을 먼저 팀이 함께 짧게 합의하�
    - `Store` 계층이 만료 여부를 관리하고, `HashTable`은 기본 저장 구조에 집중한다.
 5. 영속성 범위
    - `AOF-lite` 방식으로 성공한 쓰기 명령만 append하고, 시작 시 replay한다.
+6. 해시 함수
+   - 기본 구현은 `FNV-1a`로 고정한다.
+   - `djb2`, 단순 hash 함수, `SHA-256` 계열은 학습/비교 참고안으로만 남기고 기본 구현에는 넣지 않는다.
+7. 버킷 구조
+   - 버킷은 `separate chaining` 기반으로 구현한다.
+   - 체인의 내부 표현은 `linked list`로 고정한다.
+8. 리사이징 규칙
+   - 초기 버킷 수는 `8`로 시작한다.
+   - load factor는 `저장된 항목 수 / 버킷 수`로 계산한다.
+   - load factor가 `0.75`를 넘으면 버킷 수를 `2배`로 늘리고 모든 항목의 인덱스를 다시 배치한다.
 
 #### Cycle 3 Shared Store Interface
 
@@ -561,10 +571,13 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 담당 내용:
 
 - chaining 기반 버킷 구조
-- hash index 계산
+- `FNV-1a` 기반 hash index 계산
 - collision 처리
+- linked list 기반 separate chaining bucket 구현
 - `set/get/delete/exists`
-- load factor 기준 resize
+- 초기 버킷 수 `8`
+- load factor `0.75` 초과 시 `2배` resize
+- resize 후 재배치(rehash)
 
 제외:
 
@@ -615,11 +628,11 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 
 - `HashTable` 내부 구현, `aof.py`, README 수정 금지
 
-##### D. Docs / Ops / Smoke Preparation
+##### D. Edge Cases / Ops / Smoke Preparation
 
 목표:
 
-- 새 구조를 실제 사용 가능하게 정리하고 최종 통합 준비
+- 새 구조를 실제 사용 가능하게 정리하고, 엣지케이스/안정성/학습용 검증을 준비
 
 담당 파일:
 
@@ -627,6 +640,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 - `docs/testing.md`
 - `.env.example`
 - `scripts/smoke_test.py`
+- 필요 시 `scripts/hash_table_notes.md` 또는 동등한 비교 메모 초안
 
 담당 내용:
 
@@ -634,6 +648,9 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 - 운영/복구 절차 정리
 - smoke 시나리오 갱신 초안
 - 최종 통합 테스트 체크리스트 정리
+- collision, resize, malformed input, broken AOF 같은 엣지케이스 목록 정리
+- chaining과 다른 충돌 해결 방식(open addressing 등)의 비교 포인트를 학습 메모로 정리
+- Cycle 3 마지막 통합 테스트 때 확인할 안정성 시나리오 정의
 
 제외:
 
@@ -644,7 +661,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 - A는 `src/storage/hash_table.py`만 소유한다.
 - B는 `src/storage/store.py`, `src/storage/aof.py`만 소유한다.
 - C는 `src/server/tcp_server.py`, `src/commands/handler.py`만 소유한다.
-- D는 문서, env, smoke 스크립트만 소유한다.
+- D는 문서, env, smoke 스크립트, 엣지케이스/비교 메모 초안만 소유한다.
 - `tests/` 디렉터리의 대규모 수정은 마지막 공동 통합 단계에서만 수행한다.
 - 공용 인터페이스가 바뀌면 구현 전에 문서와 팀 합의를 먼저 갱신한다.
 
@@ -665,9 +682,12 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 
 - 기본 명령 `SET/GET/DEL`이 기존과 동일하게 동작하는지
 - 충돌이 발생하는 key 상황에서도 값이 유지되는지
+- 선택한 해시 함수(`FNV-1a`)가 deterministic하게 동작하는지
+- separate chaining bucket에서 collision key들이 정상적으로 조회/삭제되는지
 - resize 이후에도 데이터가 보존되는지
 - TTL이 있는 키가 기대대로 만료되는지
 - 서버 재시작 후 데이터가 복구되는지
+- 손상되었거나 잘린 AOF 입력에서 복구 경로가 어떻게 동작하는지
 - 잘못된 RESP와 끊긴 연결에서 서버가 죽지 않는지
 - 최종 smoke 시나리오와 README 실행법이 실제 코드와 맞는지
 
