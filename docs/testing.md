@@ -36,6 +36,12 @@
 make test-local
 ```
 
+준비 단계:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
 ### 2. Local Smoke Tests
 
 서버를 실제로 띄운 뒤 최소 시나리오를 검증한다.
@@ -51,6 +57,12 @@ make test-local
 make smoke-local
 ```
 
+현재 기준 메모:
+
+- smoke는 이미 떠 있는 로컬 서버에 붙는다.
+- 현재 서버 계약은 한 TCP 연결에서 여러 RESP 요청을 순차 처리하는 것이다.
+- smoke 스크립트는 명령마다 새 연결을 열어 검증한다.
+
 ### 3. Docker Automated Tests
 
 컨테이너 환경에서 의존성, 실행 환경, 패키징 문제를 조기에 찾는다.
@@ -60,6 +72,8 @@ make smoke-local
 ```bash
 make test-docker
 ```
+
+현재 저장소 기준 Dockerfile과 Makefile 타깃이 준비되어 있다. 단, 실제 실행에는 Docker CLI가 필요하다.
 
 ### 4. Docker Smoke Tests
 
@@ -71,6 +85,8 @@ make test-docker
 make smoke-docker
 ```
 
+현재 저장소 기준 Dockerfile과 Makefile 타깃이 준비되어 있다. 단, 실제 실행에는 Docker CLI가 필요하다.
+
 ## Minimum Redis-Like Scenarios
 
 상세 스펙이 정해지기 전까지는 아래 시나리오를 최소 검증 범위로 본다.
@@ -80,6 +96,7 @@ make smoke-docker
 - `SET key value`가 동작한다.
 - `GET key`가 동작한다.
 - `DEL key`가 동작한다.
+- 미지원 명령은 RESP 에러 응답을 반환한다.
 - 잘못된 입력 또는 미지원 명령에서 서버가 비정상 종료하지 않는다.
 
 ## Cycle 1 Role-Based Test Scope
@@ -125,6 +142,8 @@ PR을 올리기 전 기본적으로 아래를 확인한다.
 
 시간이 부족해도 최소한 `make test-local`과 `make smoke-local` 기준은 지키는 것을 목표로 한다.
 
+단, Docker CLI가 없는 환경에서는 로컬 테스트까지만 확인하고 Docker 미실행 사유를 PR 설명에 남긴다.
+
 ## CI Policy
 
 GitHub Actions CI는 로컬 검증 흐름을 그대로 따라간다.
@@ -151,6 +170,16 @@ README.md, AGENTS.md, docs/testing.md, docs/development-plan.md를 먼저 읽어
 Python asyncio 서버의 TCP/RESP 흐름을 어떻게 검증할지 포함해서, 로컬 기준 실행 명령과 필요한 Docker 기준 검증이 있으면 함께 정리해.
 상세 스펙이 없는 부분은 임의 확장하지 말고 TODO 또는 가정으로 표시해.
 ```
+
+## Manual And Visual Checks
+
+UI가 없기 때문에 시각 검증은 브라우저 화면이 아니라 터미널 로그와 RESP 응답 확인으로 정의한다.
+
+- 서버 로그: `Mini Redis server listening on <host>:<port>`
+- 수동 검증 도구: `nc`
+- 명령은 inline 텍스트가 아니라 RESP payload로 보낸다.
+- 서버 자체는 한 TCP 연결에서 여러 요청을 처리한다.
+- 현재 smoke 스크립트와 대부분의 manual 검증 예시는 명령마다 새 TCP 연결을 사용한다.
 
 ## Maintenance Rules
 

@@ -1,0 +1,34 @@
+services:
+  mini-redis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mini-redis
+    environment:
+      REDIS_HOST: 0.0.0.0
+      REDIS_PORT: 6379
+      READ_BUFFER_SIZE: 4096
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_REQUESTS: ${LOG_REQUESTS:-true}
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-ap-northeast-2}
+        awslogs-group: ${CW_LOG_GROUP:-/mini-redis/prod}
+        awslogs-stream: ${CW_LOG_STREAM:-mini-redis}
+        awslogs-create-group: "true"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.create_connection(('127.0.0.1', 6379), 2); s.sendall(b'*1\\r\\n$4\\r\\nPING\\r\\n'); d=s.recv(16); s.close(); raise SystemExit(0 if b'+PONG' in d else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
