@@ -1,0 +1,2 @@
+"test","rps","avg_latency_ms","min_latency_ms","p50_latency_ms","p95_latency_ms","p99_latency_ms","max_latency_ms"
+"PING_MBULK","64102.56","0.704","0.040","0.647","1.207","1.903","19.007"
