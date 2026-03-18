@@ -125,7 +125,10 @@ cp .env.example .env
 
 - `REDIS_HOST=0.0.0.0`
 - `REDIS_PORT=6379`
+- `AOF_ENABLED=true`
+- `AOF_PATH=data/appendonly.aof`
 - docker compose `restart: unless-stopped`
+- 호스트 `./data` 디렉터리를 컨테이너 `/app/data`에 마운트해서 AOF 파일을 보존
 
 ### 3) 수동 실행(스크립트 대신)
 
@@ -134,6 +137,12 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f mini-redis
 ```
+
+참고:
+
+- `docker-compose.yml`은 `.env`의 `AOF_ENABLED`, `AOF_PATH` 값을 컨테이너 환경변수로 전달한다.
+- 기본 AOF 경로 `data/appendonly.aof`는 호스트 `./data/appendonly.aof`로 보존된다.
+- 컨테이너를 재시작하거나 recreate해도 같은 프로젝트 디렉터리의 `./data`를 유지하면 복구 가능하다.
 
 ### 4) 접속 확인
 
@@ -191,6 +200,70 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 - 없는 키에 대한 `GET`은 RESP null(`$-1\r\n`)로 정상 처리되는 것을 확인했다.
 - storage 레벨 TTL 테스트에서 `expire(key, seconds)` 적용 후 만료 시간이 지나면 `get(key)`가 `None`을 반환하는 것을 확인했다.
 - 동시성 검증으로 `100`개의 동시 클라이언트가 같은 키에 `INCR`를 수행했을 때 최종 값이 `100`으로 일관되게 유지되는 것을 확인했다.
+
+## HashTable Structure
+
+Cycle 3 기준 저장소는 separate chaining 방식의 커스텀 `HashTable`을 사용한다. 값 저장은 `HashTable`이 담당하고, TTL 만료 시각은 `Store`가 별도 메타데이터로 관리한다.
+
+![HashTable structure](docs/hash_table_structure.svg)
+
+```mermaid
+flowchart LR
+    subgraph Store["Store"]
+        TTL["expire_at metadata\nkey -> expire timestamp"]
+        HT["HashTable adapter"]
+    end
+
+    subgraph Buckets["HashTable Buckets"]
+        B0["bucket[0]"] --> N0["HashNode(key-a, value-a)"]
+        B1["bucket[1]"] --> E1["empty"]
+        B2["bucket[2]"] --> N2A["HashNode(key-b, value-b)"]
+        N2A --> N2B["HashNode(key-c, value-c)"]
+        B3["bucket[3]"] --> E3["empty"]
+    end
+
+    HT --> Buckets
+    TTL -. checks before get/delete/exists .-> HT
+```
+
+설명:
+
+- key/value 자체는 `HashTable` bucket에 저장된다.
+- 충돌이 나면 같은 bucket 안에서 `HashNode -> next` 형태로 연결된다.
+- TTL은 `HashTable`에 넣지 않고 `Store.expire_at`에서 따로 관리한다.
+- `get/delete/exists` 호출 전에 `Store`가 만료 여부를 확인한 뒤 실제 `HashTable` 접근을 수행한다.
+
+## Cycle Verification
+
+Cycle 1 검증:
+
+- 명령: `python -m pytest tests/unit/test_parser.py tests/unit/test_writer.py tests/unit/test_main.py -q`
+- 결과: `25 passed`
+- 확인 범위: RESP 파싱/직렬화, 인자 대소문자 보존, 빈 array/잘못된 입력 처리, 환경변수 로딩, 기본 서버 설정 계약, AOF 환경변수 해석
+
+Cycle 2 검증:
+
+- 명령: `python -m pytest tests/integration/test_command_handler.py tests/integration/test_server_connection.py -q`
+- 결과: `25 passed`
+- 확인 범위: `PING/SET/GET/DEL/EXISTS/INCR/DECR/EXPIRE`, persistent connection, partial request buffering, 혼합 연속 요청 처리, protocol error 이후 연결 유지
+
+Cycle 3 검증:
+
+- 명령: `python -m pytest tests/unit/test_hash_table.py tests/unit/test_store.py tests/unit/test_aof.py -q`
+- 결과: `28 passed`
+- 확인 범위: 커스텀 `HashTable`, collision/delete/reinsert, resize 보존, `Store -> HashTable` 연결, TTL 만료 처리, AOF append/replay, non-mutating command 무시, overwrite replay
+
+최종 통합 검증:
+
+- 명령: `python -m pytest -q`
+- 결과: `78 passed, 1 skipped`
+- 현재 저장소 기준으로 Cycle 1~3 구현이 함께 동작하는 회귀 상태를 확인했다.
+
+로컬 Docker AOF 영속성 검증:
+
+- 명령: `docker compose up -d --build -> SET persist1 hello -> docker compose restart -> GET persist1`
+- 결과: 컨테이너 재시작 후에도 `hello`가 복구되었고, 호스트 `./data/appendonly.aof` 파일 생성 및 replay를 확인했다.
+- 확인 범위: `AOF_ENABLED`, `AOF_PATH` 환경변수 전달, host volume 기반 AOF 보존, restart 이후 replay 복구
 
 ## Selected Collaboration Skills
 
