@@ -180,6 +180,7 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 - `AGENTS.md`: AI 및 자동화 작업 규칙
 - `docs/development-plan.md`: 4인 개발 사이클, 역할 분담, 구조 경계
 - `docs/testing.md`: 테스트 전략, PR 전 검증 기준, CI 연결 기준
+- `docs/performance-benchmark-plan.md`: Mini Redis / Redis / MySQL 성능 비교 테스트 계획
 - `docs/commit-convention.md`: 커밋 메시지와 변경 단위 규칙
 - `docs/ai-prompts.md`: 팀 공용 프롬프트 템플릿
 
