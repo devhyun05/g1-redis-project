@@ -149,6 +149,26 @@ printf '*1\r\n$4\r\nPING\r\n' | nc 127.0.0.1 6379
 printf '*1\r\n$4\r\nPING\r\n' | nc <EC2_PUBLIC_IP> 6379
 ```
 
+### 5) CloudWatch 로그 확인 (Optional)
+
+IAM Role에 CloudWatch Logs 권한이 연결되어 있으면 docker compose가 아래 로그 그룹으로 컨테이너 로그를 전송한다.
+
+- `CW_LOG_GROUP=/mini-redis/prod`
+- `CW_LOG_STREAM=mini-redis`
+
+드라이버 적용 확인:
+
+```bash
+docker inspect mini-redis --format '{{.HostConfig.LogConfig.Type}}'
+```
+
+재시작 후 반영:
+
+```bash
+docker compose down
+docker compose up -d --build --force-recreate
+```
+
 ## Manual Verification
 
 이 프로젝트는 UI가 없는 TCP 서버라서 브라우저 기반 시각 검증 대신 터미널 출력과 RESP 응답을 확인한다.

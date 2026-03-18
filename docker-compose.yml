@@ -11,6 +11,13 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-ap-northeast-2}
+        awslogs-group: ${CW_LOG_GROUP:-/mini-redis/prod}
+        awslogs-stream: ${CW_LOG_STREAM:-mini-redis}
+        awslogs-create-group: "true"
     healthcheck:
       test:
         [
