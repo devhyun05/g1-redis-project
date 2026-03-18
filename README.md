@@ -175,6 +175,16 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 ) | nc 127.0.0.1 6381
 ```
 
+## Stress Test Notes
+
+- `redis-benchmark` 기준으로 `PING`, `SET`, `GET`에 대해 소/중/대 부하 테스트를 수행했다.
+- 최대 검증 조건: `100000 requests`, `100 concurrent clients`
+- 관측 처리량:
+  - `PING_BULK`: 약 `21.8k req/s`
+  - `SET`: 약 `6.3k req/s`
+  - `GET`: 약 `6.4k req/s`
+- malformed RESP flood, partial connection hold-open, large payload 입력을 포함한 비정상 시나리오에서도 서버가 즉시 종료되거나 응답 불능 상태로 빠지지 않는 것을 확인했다.
+
 ## Selected Collaboration Skills
 
 현재 저장소에서 협업용으로 우선 사용하는 Codex 스킬은 아래 두 개다.
