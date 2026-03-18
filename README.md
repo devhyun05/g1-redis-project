@@ -90,6 +90,34 @@ AI를 활용해 하루 안에 Redis 유사 서버를 구현하는 팀 프로젝�
 
 Python 프로젝트의 실제 구현은 `python -m`, `pytest`, 패키지 매니저 명령을 사용할 수 있지만, CI와 문서는 위 `make` 인터페이스를 기준으로 맞춘다.
 
+현재 기준 메모:
+
+- 테스트 시작 전 의존성 설치: `python3 -m pip install -r requirements.txt`
+- `make smoke-local`은 이미 실행 중인 로컬 서버에 붙는 smoke 스크립트다.
+- `make test-docker`, `make smoke-docker`는 Docker CLI가 설치된 환경에서 실행한다.
+
+Docker 명령:
+
+- `make test-docker`: 컨테이너 안에서 `pytest`와 `ruff`를 실행한다.
+- `make smoke-docker`: 서버 컨테이너를 띄운 뒤 별도 컨테이너에서 smoke pytest를 실행한다.
+
+## Manual Verification
+
+이 프로젝트는 UI가 없는 TCP 서버라서 브라우저 기반 시각 검증 대신 터미널 출력과 RESP 응답을 확인한다.
+
+- 서버 기동 확인: `Mini Redis server listening on <host>:<port>`
+- 수동 명령 검증 도구: `nc`
+- 현재 서버 계약: 한 TCP 연결당 한 요청 처리
+
+예시:
+
+```bash
+printf '*1\r\n$4\r\nPING\r\n' | nc 127.0.0.1 6381
+printf '*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n' | nc 127.0.0.1 6381
+printf '*2\r\n$3\r\nGET\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
+printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
+```
+
 ## Selected Collaboration Skills
 
 현재 저장소에서 협업용으로 우선 사용하는 Codex 스킬은 아래 두 개다.

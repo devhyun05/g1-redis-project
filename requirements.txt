@@ -1,0 +1,5 @@
+# Cycle 1 runtime uses the Python standard library.
+# Test and lint tools are installed from this file for a simple shared setup.
+pytest>=8.0
+pytest-asyncio>=0.23
+ruff>=0.4
