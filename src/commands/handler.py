@@ -38,6 +38,12 @@ def handle_command(tokens: list[str], store: Store) -> Response:
         return _handle_get(tokens, store)
     if command == "DEL":
         return _handle_delete(tokens, store)
+    if command == "EXISTS":
+        return _handle_exists(tokens, store)
+    if command == "INCR":
+        return _handle_increment(tokens, store, delta=1)
+    if command == "DECR":
+        return _handle_increment(tokens, store, delta=-1)
 
     return _error(f"ERR unknown command '{command}'")
 
@@ -76,6 +82,34 @@ def _handle_delete(tokens: list[str], store: Store) -> Response:
 
     _, key = tokens
     return {"type": "integer", "value": store.delete(key)}
+
+
+def _handle_exists(tokens: list[str], store: Store) -> Response:
+    if len(tokens) != 2:
+        return _wrong_arity("EXISTS")
+
+    _, key = tokens
+    return {"type": "integer", "value": 1 if store.get(key) is not None else 0}
+
+
+def _handle_increment(tokens: list[str], store: Store, delta: int) -> Response:
+    command = "INCR" if delta > 0 else "DECR"
+    if len(tokens) != 2:
+        return _wrong_arity(command)
+
+    _, key = tokens
+    raw_value = store.get(key)
+    if raw_value is None:
+        current_value = 0
+    else:
+        try:
+            current_value = int(raw_value)
+        except ValueError:
+            return _error(f"ERR value is not an integer or out of range for '{command}'")
+
+    next_value = current_value + delta
+    store.set(key, str(next_value))
+    return {"type": "integer", "value": next_value}
 
 
 def _wrong_arity(command: str) -> Response:

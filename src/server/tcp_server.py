@@ -65,7 +65,10 @@ class TcpServer:
     ) -> None:
         try:
             while True:
-                data = await reader.read(self.read_size)
+                try:
+                    data = await reader.read(self.read_size)
+                except OSError:
+                    break
                 if not data:
                     break
 
@@ -85,5 +88,5 @@ class TcpServer:
             writer.close()
             try:
                 await writer.wait_closed()
-            except ConnectionResetError:
+            except OSError:
                 pass
