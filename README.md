@@ -155,6 +155,23 @@ IAM Role에 CloudWatch Logs 권한이 연결되어 있으면 docker compose가 �
 
 - `CW_LOG_GROUP=/mini-redis/prod`
 - `CW_LOG_STREAM=mini-redis`
+- `LOG_LEVEL=INFO` 이상에서 서버 이벤트 로그가 기록된다.
+- `LOG_REQUESTS=true`일 때 요청 단위 JSON 로그가 기록된다.
+
+요청 로그 예시:
+
+```json
+{"event":"request","connection_id":1,"client":"43.203.212.24:52344","request_index":3,"command":"GET","argc":2,"key":"user","response_type":"bulk_string","payload_bytes":23,"latency_ms":0.41}
+```
+
+CloudWatch Logs Insights 예시 쿼리:
+
+```sql
+fields @timestamp, event, client, command, key, response_type, latency_ms
+| filter event = "request"
+| sort @timestamp desc
+| limit 50
+```
 
 드라이버 적용 확인:
 

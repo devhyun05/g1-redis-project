@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import itertools
+import json
+import logging
+import time
 from typing import Any, Callable, Literal, NamedTuple
 
 
@@ -31,6 +35,8 @@ class TcpServer:
         store: Any,
         persist_command: PersistCommandFunc | None = None,
         read_size: int = 4096,
+        log_requests: bool = True,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -40,7 +46,10 @@ class TcpServer:
         self.store = store
         self.persist_command = persist_command
         self.read_size = read_size
+        self.log_requests = log_requests
+        self.logger = logger or logging.getLogger("mini_redis.server")
         self._server: asyncio.AbstractServer | None = None
+        self._connection_counter = itertools.count(1)
 
     async def start(self) -> asyncio.AbstractServer:
         if self._server is not None:
@@ -75,12 +84,26 @@ class TcpServer:
         writer: asyncio.StreamWriter,
     ) -> None:
         buffer = bytearray()
+        connection_id = next(self._connection_counter)
+        client = _format_client(writer.get_extra_info("peername"))
+        request_count = 0
+
+        self._log_event(
+            "connection_open",
+            connection_id=connection_id,
+            client=client,
+        )
 
         try:
             while True:
                 try:
                     data = await reader.read(self.read_size)
                 except OSError:
+                    self._log_event(
+                        "connection_read_error",
+                        connection_id=connection_id,
+                        client=client,
+                    )
                     break
                 if not data:
                     break
@@ -96,15 +119,28 @@ class TcpServer:
 
                     if extraction.status == "malformed":
                         buffer.clear()
+                        self._log_event(
+                            "protocol_error",
+                            connection_id=connection_id,
+                            client=client,
+                        )
                         if not await _write_payload(writer, b"-ERR protocol error\r\n"):
                             return
                         break
 
                     assert extraction.frame is not None
+                    request_count += 1
+                    started_at = time.perf_counter()
+                    response_type = "error"
+                    tokens: list[str] = []
 
                     try:
                         tokens = self.parse_request(extraction.frame)
                         response = self.handle_command(tokens, self.store)
+                        if isinstance(response, dict):
+                            response_type = str(response.get("type", "unknown"))
+                        else:
+                            response_type = "unknown"
                         payload = self.encode_response(response)
                     except Exception:  # noqa: BLE001
                         payload = b"-ERR internal server error\r\n"
@@ -113,7 +149,23 @@ class TcpServer:
                             try:
                                 self.persist_command(tokens, response)
                             except Exception:  # noqa: BLE001
+                                response_type = "error"
                                 payload = b"-ERR internal server error\r\n"
+
+                    if self.log_requests:
+                        elapsed_ms = round((time.perf_counter() - started_at) * 1000, 3)
+                        self._log_event(
+                            "request",
+                            connection_id=connection_id,
+                            client=client,
+                            request_index=request_count,
+                            command=_command_name(tokens),
+                            argc=len(tokens),
+                            key=_command_key(tokens),
+                            response_type=response_type,
+                            payload_bytes=len(extraction.frame),
+                            latency_ms=elapsed_ms,
+                        )
 
                     if not await _write_payload(writer, payload):
                         return
@@ -123,6 +175,16 @@ class TcpServer:
                 await writer.wait_closed()
             except OSError:
                 pass
+            self._log_event(
+                "connection_close",
+                connection_id=connection_id,
+                client=client,
+                request_count=request_count,
+            )
+
+    def _log_event(self, event: str, **fields: Any) -> None:
+        payload = {"event": event, **fields}
+        self.logger.info(json.dumps(payload, separators=(",", ":")))
 
 
 async def _write_payload(
@@ -201,3 +263,27 @@ def _parse_non_negative_int(raw_value: bytes) -> int | None:
         return None
 
     return value
+
+
+def _command_name(tokens: list[str]) -> str:
+    if not tokens:
+        return "UNKNOWN"
+
+    return tokens[0]
+
+
+def _command_key(tokens: list[str]) -> str | None:
+    if len(tokens) < 2:
+        return None
+
+    return tokens[1]
+
+
+def _format_client(peername: Any) -> str:
+    if isinstance(peername, tuple) and len(peername) >= 2:
+        return f"{peername[0]}:{peername[1]}"
+
+    if peername is None:
+        return "unknown"
+
+    return str(peername)

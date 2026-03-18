@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable
@@ -22,6 +24,9 @@ ENV_PORT_KEY = "REDIS_PORT"
 ENV_READ_BUFFER_SIZE_KEY = "READ_BUFFER_SIZE"
 ENV_AOF_ENABLED_KEY = "AOF_ENABLED"
 ENV_AOF_PATH_KEY = "AOF_PATH"
+ENV_LOG_LEVEL_KEY = "LOG_LEVEL"
+ENV_LOG_REQUESTS_KEY = "LOG_REQUESTS"
+DEFAULT_LOG_LEVEL = "INFO"
 
 
 def load_dotenv(path: Path = Path(".env")) -> None:
@@ -64,7 +69,10 @@ def _load_bool_env(key: str, default: bool) -> bool:
 
 async def run_server() -> None:
     load_dotenv()
+    configure_logging()
+
     host, port, read_buffer_size, aof_enabled, aof_path = load_server_config()
+    log_requests = _load_bool_env(ENV_LOG_REQUESTS_KEY, default=True)
     store = Store()
     aof = AppendOnlyFile(aof_path) if aof_enabled else None
 
@@ -80,14 +88,35 @@ async def run_server() -> None:
         store=store,
         persist_command=_persist_command(aof),
         read_size=read_buffer_size,
+        log_requests=log_requests,
     )
 
     await server.start()
+    logging.getLogger("mini_redis.main").info(
+        json.dumps(
+            {
+                "event": "server_started",
+                "host": host,
+                "port": port,
+                "read_buffer_size": read_buffer_size,
+                "aof_enabled": aof_enabled,
+                "log_requests": log_requests,
+            },
+            separators=(",", ":"),
+        )
+    )
     print(f"Mini Redis server listening on {host}:{port}")
     try:
         await server.serve_forever()
     finally:
         await server.shutdown()
+
+
+def configure_logging() -> None:
+    raw_level = os.getenv(ENV_LOG_LEVEL_KEY, DEFAULT_LOG_LEVEL).strip().upper()
+    level_name = raw_level or DEFAULT_LOG_LEVEL
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(level=level, format="%(message)s")
 
 
 def _persist_command(aof: AppendOnlyFile | None) -> Callable[[list[str], Any], None] | None:

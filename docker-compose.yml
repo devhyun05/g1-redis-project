@@ -8,6 +8,8 @@ services:
       REDIS_HOST: 0.0.0.0
       REDIS_PORT: 6379
       READ_BUFFER_SIZE: 4096
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_REQUESTS: ${LOG_REQUESTS:-true}
     ports:
       - "6379:6379"
     restart: unless-stopped
