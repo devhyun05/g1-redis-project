@@ -1,5 +1,6 @@
 import pytest
 
+from src.storage.hash_table import HashTable
 from src.storage.store import Store
 
 
@@ -24,6 +25,12 @@ def test_set_overwrites_existing_value() -> None:
     store.set("name", "second")
 
     assert store.get("name") == "second"
+
+
+def test_store_uses_hash_table_backing() -> None:
+    store = Store()
+
+    assert isinstance(store._data._table, HashTable)
 
 
 def test_delete_removes_existing_key_and_returns_one() -> None:
@@ -113,3 +120,13 @@ def test_set_clears_existing_expiration(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr("src.storage.store.time.time", lambda: 110.0)
     assert store.get("session") == "second"
+
+
+def test_store_preserves_values_across_hash_table_resize() -> None:
+    store = Store()
+
+    for index in range(12):
+        store.set(f"key-{index}", f"value-{index}")
+
+    for index in range(12):
+        assert store.get(f"key-{index}") == f"value-{index}"

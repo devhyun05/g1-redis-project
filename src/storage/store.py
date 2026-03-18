@@ -5,12 +5,14 @@ from __future__ import annotations
 import time
 from typing import Protocol
 
+from src.storage.hash_table import HashTable
+
 
 class _StringValueBackend(Protocol):
     """Minimal backend contract for string key/value storage.
 
-    TODO: Replace the dict-backed implementation with the Cycle 3 HashTable
-    adapter once `src/storage/hash_table.py` is available.
+    Store depends on this boundary so the backing structure can change without
+    affecting the server/command contract.
     """
 
     def set(self, key: str, value: str) -> None: ...
@@ -22,34 +24,30 @@ class _StringValueBackend(Protocol):
     def contains(self, key: str) -> bool: ...
 
 
-class _DictStringValueBackend:
-    """Temporary backend that keeps the public Store contract dict-agnostic."""
+class _HashTableStringValueBackend:
+    """HashTable adapter that preserves the existing Store contract."""
 
     def __init__(self) -> None:
-        self._items: dict[str, str] = {}
+        self._table = HashTable()
 
     def set(self, key: str, value: str) -> None:
-        self._items[key] = value
+        self._table.set(key, value)
 
     def get(self, key: str) -> str | None:
-        return self._items.get(key)
+        return self._table.get(key)
 
     def delete(self, key: str) -> int:
-        if key not in self._items:
-            return 0
-
-        del self._items[key]
-        return 1
+        return self._table.delete(key)
 
     def contains(self, key: str) -> bool:
-        return key in self._items
+        return self._table.exists(key)
 
 
 class Store:
     """Store UTF-8 string keys and values for Cycle 1."""
 
     def __init__(self) -> None:
-        self._data: _StringValueBackend = _DictStringValueBackend()
+        self._data: _StringValueBackend = _HashTableStringValueBackend()
         self._expire_at: dict[str, float] = {}
 
     def set(self, key: str, value: str) -> None:

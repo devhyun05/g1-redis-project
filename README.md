@@ -222,3 +222,6 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 - TTL 만료 정보는 이번 AOF 범위에 포함하지 않았고, 추후 `EXPIRE/EXPIREAT` wiring과 함께 보강할 예정이다.
 - Docker 기반 재시작 복구 테스트(`SET -> 컨테이너 restart -> GET`)를 수행했고, 재시작 후에도 저장한 key가 복구되는 것을 확인했다.
 - `redis-cli --raw -h <HOST> -p <PORT> get <KEY>` 또는 raw RESP 응답 기준으로 복구 결과를 검증했다.
+- Cycle 3 기준 `Store` 내부 저장 구조를 커스텀 `HashTable`로 연결했다.
+- TTL 메타데이터는 계속 `Store` 계층에서 관리하고, 실제 key-value 저장은 `HashTable`이 담당한다.
+- `Store/HashTable/AOF` 회귀 테스트와 전체 `pytest`를 다시 실행했고 모두 통과했다.
