@@ -82,6 +82,36 @@ make smoke-docker
 - `DEL key`가 동작한다.
 - 잘못된 입력 또는 미지원 명령에서 서버가 비정상 종료하지 않는다.
 
+## Cycle 1 Role-Based Test Scope
+
+Cycle 1에서는 각자가 전체 시스템을 모두 검증하려 하기보다, 맡은 변경 축에 맞는 테스트를 먼저 책임진다. 마지막에는 팀이 함께 최소 smoke를 확인한다.
+
+### A. Runtime and Configuration
+
+- 서버가 정상 기동되는지 확인한다.
+- 설정 로딩과 기본 포트 적용이 기대대로 동작하는지 확인한다.
+- fake handler 또는 최소 stub를 사용해 연결 수락 경로가 깨지지 않는지 본다.
+
+### B. Protocol and Connection Handling
+
+- RESP 최소 서브셋 파서 단위 테스트를 작성한다.
+- serializer가 정상 응답과 에러 응답을 RESP 형식으로 만드는지 확인한다.
+- 잘못된 입력에서 프로세스가 죽지 않고 에러로 변환되는지 검증한다.
+
+### C. Command and Storage
+
+- `PING`, `SET`, `GET`, `DEL`의 정상 경로를 단위 테스트로 검증한다.
+- 없는 key 조회, 중복 `SET`, `DEL` 결과 같은 기본 경계 조건을 확인한다.
+- 미지원 명령과 인자 수 오류를 에러 결과로 반환하는지 확인한다.
+
+### D. Tests and Integration Glue
+
+- parser, command, server round-trip을 잇는 최소 통합 테스트를 만든다.
+- `make test-local`과 `make smoke-local`에 연결될 실행 경로를 정리한다.
+- 당일 통합 직전에는 실제 서버를 띄운 smoke 시나리오를 짧게 유지하고, 실패 원인이 드러나는 메시지를 남긴다.
+
+Cycle 1의 기본 원칙은 낮 동안 각자 단위 테스트와 계약 테스트를 돌리고, 마감 직전에 팀이 함께 end-to-end smoke를 맞추는 것이다.
+
 ## PR Gate
 
 PR을 올리기 전 기본적으로 아래를 확인한다.

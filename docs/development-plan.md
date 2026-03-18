@@ -146,6 +146,115 @@
 
 공용 인터페이스를 바꾸면 관련 문서를 먼저 또는 함께 갱신한다.
 
+## Cycle 1 Thin Contracts
+
+Cycle 1에서는 모든 내부 구조를 먼저 설계하지 않고, 팀이 병렬 작업에 필요한 최소 접점만 고정한다.
+
+- Runtime 계층은 `asyncio` 연결에서 읽은 바이트를 프로토콜 계층에 넘기고, 반환된 응답 바이트를 그대로 writer에 쓴다.
+- Protocol 계층은 입력 바이트를 최소 RESP 요청 단위로 파싱해 `list[str]` 또는 동등한 얇은 명령 토큰 형태로 명령 계층에 넘긴다.
+- Commands 계층은 정규화된 명령 토큰을 받아 응답 객체 또는 직렬화 가능한 결과를 반환한다.
+- Storage 계층은 `GET`, `SET`, `DEL` 구현에 필요한 최소 key-value 연산만 노출한다.
+- Serializer는 명령 결과 또는 에러 결과를 RESP 응답 바이트로 변환한다.
+
+Cycle 1 기준 예시 시그니처는 아래 수준이면 충분하다.
+
+```python
+def parse_request(data: bytes) -> list[str]: ...
+def execute_command(tokens: list[str]) -> Response: ...
+def encode_response(response: Response) -> bytes: ...
+```
+
+위 계약은 Cycle 1 범위의 통합을 위한 최소 기준이며, 내부 클래스 구조나 예외 계층을 과하게 선결정하지 않는다.
+
+## Cycle 1 File-Level Ownership
+
+Cycle 1 분업은 사람보다 변경 축을 기준으로 나눈다. 각 담당자는 우선 아래 파일 범위에서 작업하고, 공용 접점 변경이 필요하면 먼저 문서와 팀에 공유한다.
+
+### A. Runtime and Configuration
+
+추천 담당 파일:
+
+- `src/<package>/bootstrap/main.py`
+- `src/<package>/bootstrap/server.py`
+- `src/<package>/config/settings.py`
+
+핵심 책임:
+
+- 서버 시작 진입점
+- `asyncio.start_server` wiring
+- 환경변수 및 포트 설정 로딩
+- protocol handler 주입과 종료 흐름 정리
+
+이 역할은 서버 생명주기 축을 담당하므로 다른 모듈과의 직접 충돌이 적다.
+
+### B. Protocol and Connection Handling
+
+추천 담당 파일:
+
+- `src/<package>/protocol/parser.py`
+- `src/<package>/protocol/serializer.py`
+- `src/<package>/protocol/models.py`
+- 필요 시 `src/<package>/protocol/session.py`
+
+핵심 책임:
+
+- RESP 최소 서브셋 파싱
+- 명령 토큰 정규화
+- 응답 직렬화
+- 잘못된 입력의 RESP 에러 변환
+
+이 역할은 바이트 포맷과 입출력 규약을 한곳에 모아 command 구현과 분리한다.
+
+### C. Command and Storage
+
+추천 담당 파일:
+
+- `src/<package>/commands/router.py`
+- `src/<package>/commands/handlers.py`
+- `src/<package>/storage/memory.py`
+
+핵심 책임:
+
+- `PING`, `SET`, `GET`, `DEL`
+- 명령 디스패치
+- 최소 key-value 저장소 구현
+- 미지원 명령과 잘못된 인자 처리
+
+이 역할은 Cycle 1의 핵심 기능을 담당하지만 protocol과는 얇은 입력/출력 계약만 맞추면 된다.
+
+### D. Tests and Integration Glue
+
+추천 담당 파일:
+
+- `tests/unit/test_parser.py`
+- `tests/unit/test_commands.py`
+- `tests/integration/test_server_roundtrip.py`
+- `tests/smoke/test_smoke_basic.py`
+- `scripts/smoke_local.py`
+- `Makefile`
+
+핵심 책임:
+
+- 빠른 단위 테스트 초안
+- 최소 round-trip 통합 테스트
+- 로컬 smoke 실행 경로
+- README 실행 절차 동기화
+
+이 역할은 구현을 직접 많이 소유하기보다 공용 계약이 실제로 붙는지 빠르게 검증하는 역할이다.
+
+## Cycle 1 Integration Order
+
+Cycle 1 당일 통합은 처음부터 전체를 붙이지 않고, 아래 순서로 작은 접점을 닫아 가는 방식으로 진행한다.
+
+1. 시작 전에 명령 토큰 형식, 응답 형식, 에러 표현에 대한 얇은 계약을 문서와 채팅에 다시 맞춘다.
+2. Runtime 담당은 fake protocol handler로 서버 기동과 연결 수락만 먼저 확인한다.
+3. Protocol 담당은 fake command executor를 사용해 parser와 serializer가 최소 요청/응답을 처리하는지 확인한다.
+4. Command 담당은 protocol 없이 토큰 입력만으로 `PING`, `SET`, `GET`, `DEL`을 검증한다.
+5. Test 담당은 위 계약을 기준으로 단위 테스트와 최소 round-trip 테스트 뼈대를 만든다.
+6. 중간 체크포인트에서 protocol과 command를 먼저 연결해 `PING` 왕복을 맞춘다.
+7. 이후 `SET`, `GET`, `DEL`을 순서대로 연결하고, 마지막에 실제 서버를 띄워 smoke 시나리오를 함께 확인한다.
+8. 통합 중 계약 변경이 생기면 코드만 임시 수정하지 말고 이 문서와 테스트를 함께 갱신한다.
+
 ## Draft Folder Structure
 
 아직 최종 확정 전이지만 아래 구조를 기본안으로 사용한다.
