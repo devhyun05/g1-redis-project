@@ -185,6 +185,13 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
   - `GET`: 약 `6.4k req/s`
 - malformed RESP flood, partial connection hold-open, large payload 입력을 포함한 비정상 시나리오에서도 서버가 즉시 종료되거나 응답 불능 상태로 빠지지 않는 것을 확인했다.
 
+## Functional Test Notes
+
+- `SET` 후 `GET`이 같은 값으로 정확히 반환되는 것을 확인했다.
+- 없는 키에 대한 `GET`은 RESP null(`$-1\r\n`)로 정상 처리되는 것을 확인했다.
+- storage 레벨 TTL 테스트에서 `expire(key, seconds)` 적용 후 만료 시간이 지나면 `get(key)`가 `None`을 반환하는 것을 확인했다.
+- 동시성 검증으로 `100`개의 동시 클라이언트가 같은 키에 `INCR`를 수행했을 때 최종 값이 `100`으로 일관되게 유지되는 것을 확인했다.
+
 ## Selected Collaboration Skills
 
 현재 저장소에서 협업용으로 우선 사용하는 Codex 스킬은 아래 두 개다.
@@ -206,3 +213,12 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 
 - 현재 단계: Python `asyncio` + TCP/RESP 기준 문서 초안 수립
 - 다음 단계: 팀 피드백 반영, 저장소 골격 생성, 실행 명령 확정, CI 파일 초안 작성
+
+## Recent Notes
+
+- AOF(Append Only File) 영속성 초안을 추가했다.
+- 현재는 `SET`, `DEL`, `INCR`, `DECR` 같은 상태 변경 명령만 RESP 형식으로 append한다.
+- 서버 시작 시 AOF 파일을 replay해 메모리 상태를 복구한다.
+- TTL 만료 정보는 이번 AOF 범위에 포함하지 않았고, 추후 `EXPIRE/EXPIREAT` wiring과 함께 보강할 예정이다.
+- Docker 기반 재시작 복구 테스트(`SET -> 컨테이너 restart -> GET`)를 수행했고, 재시작 후에도 저장한 key가 복구되는 것을 확인했다.
+- `redis-cli --raw -h <HOST> -p <PORT> get <KEY>` 또는 raw RESP 응답 기준으로 복구 결과를 검증했다.

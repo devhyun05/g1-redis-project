@@ -7,6 +7,7 @@ from typing import Any, Callable, Literal, NamedTuple
 ParserFunc = Callable[[bytes], list[str]]
 CommandHandlerFunc = Callable[[list[str], Any], Any]
 EncoderFunc = Callable[[Any], bytes]
+PersistCommandFunc = Callable[[list[str], Any], None]
 FrameStatus = Literal["complete", "incomplete", "malformed"]
 
 CRLF = b"\r\n"
@@ -28,6 +29,7 @@ class TcpServer:
         handle_command: CommandHandlerFunc,
         encode_response: EncoderFunc,
         store: Any,
+        persist_command: PersistCommandFunc | None = None,
         read_size: int = 4096,
     ) -> None:
         self.host = host
@@ -36,6 +38,7 @@ class TcpServer:
         self.handle_command = handle_command
         self.encode_response = encode_response
         self.store = store
+        self.persist_command = persist_command
         self.read_size = read_size
         self._server: asyncio.AbstractServer | None = None
 
@@ -102,6 +105,8 @@ class TcpServer:
                     try:
                         tokens = self.parse_request(extraction.frame)
                         response = self.handle_command(tokens, self.store)
+                        if self.persist_command is not None:
+                            self.persist_command(tokens, response)
                         payload = self.encode_response(response)
                     except Exception:  # noqa: BLE001
                         payload = b"-ERR internal server error\r\n"
