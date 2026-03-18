@@ -482,19 +482,188 @@ Cycle 2 우선 작업 순서는 아래를 따른다.
 - D는 `storage + smoke + README` 축에 집중한다.
 - 공용 인터페이스 변경이 필요하면 코드 선변경 대신 문서/팀 합의부터 진행한다.
 
-### Cycle 3. Extension and Demo Readiness
+### Cycle 3. Custom HashTable, Persistence, and Stability
 
 목표:
 
-- 필요한 확장 기능 또는 예외 처리 보강
-- 로그/설정/문서 정리
-- 데모 시나리오 안정화
+- Python `dict` 대신 직접 구현한 `HashTable`을 저장소의 핵심 자료구조로 사용한다.
+- 커스텀 저장소 위에 최소 영속성(`AOF-lite`)을 얹어 재시작 후 데이터 복구를 가능하게 한다.
+- 서버 연결 처리, 명령 에러 처리, 운영 문서를 안정화한다.
+- 테스트는 각자 최소 자기 점검만 하고, 마지막에 팀이 함께 통합 테스트를 수행한다.
 
 산출물:
 
-- 데모 경로 점검
-- 문서 정리
-- 남은 리스크 목록
+- `src/storage/hash_table.py` 기반 커스텀 해시테이블
+- `src/storage/persistence.py` 기반 최소 영속성
+- 재시작 후 복구 가능한 store
+- 안정화된 server/command 경로
+- 최종 smoke 시나리오와 운영 문서
+
+#### Cycle 3 공동 설계 선행사항
+
+Cycle 3는 구현 전에 아래 항목을 먼저 팀이 함께 짧게 합의하고 시작한다.
+
+1. 충돌 해결 방식
+   - 기본안은 `chaining`으로 간다.
+   - `open addressing`은 비교/확장 아이디어로 남기되 Cycle 3 기본 구현에는 넣지 않는다.
+2. HashTable 책임 범위
+   - key-value 저장, 조회, 삭제, 존재 여부 확인, 필요 시 resize
+3. key/value 범위
+   - Cycle 3까지는 `str -> str` 기준을 유지한다.
+4. TTL 처리 위치
+   - `Store` 계층이 만료 여부를 관리하고, `HashTable`은 기본 저장 구조에 집중한다.
+5. 영속성 범위
+   - `AOF-lite` 방식으로 성공한 쓰기 명령만 append하고, 시작 시 replay한다.
+
+#### Cycle 3 Shared Store Interface
+
+Cycle 3에서 모든 역할이 공유하는 저장소 계약은 아래를 기준으로 한다. 구현 전에 이 계약을 문서와 채팅에서 다시 확인한다.
+
+```python
+class StoreProtocol(Protocol):
+    def set(self, key: str, value: str) -> None: ...
+    def get(self, key: str) -> str | None: ...
+    def delete(self, key: str) -> int: ...
+    def exists(self, key: str) -> bool: ...
+    def expire(self, key: str, seconds: int) -> int: ...
+```
+
+규칙:
+
+- `set`은 성공 시 값을 저장하고 예외를 일으키지 않는다.
+- `get`은 값이 없거나 만료되었으면 `None`을 반환한다.
+- `delete`는 삭제 성공 시 `1`, 없으면 `0`을 반환한다.
+- `exists`는 현재 시점에 읽을 수 있는 키인지 `bool`로 반환한다.
+- `expire`는 TTL 설정 성공 시 `1`, 대상 키가 없으면 `0`을 반환한다.
+- `commands`와 `server`는 `StoreProtocol`만 의존하고, `HashTable` 내부 구조를 직접 알지 않는다.
+- `persistence`는 내부 버킷 구조 대신 `StoreProtocol` 또는 replay용 명시적 메서드만 사용한다.
+
+#### Cycle 3 Role Ownership
+
+Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한다. 테스트 파일의 대규모 수정은 마지막 통합 단계에서 전원이 함께 진행한다.
+
+##### A. HashTable Core
+
+목표:
+
+- Python `dict`를 대체할 커스텀 `HashTable` 구현
+
+담당 파일:
+
+- `src/storage/hash_table.py` 신규
+
+담당 내용:
+
+- chaining 기반 버킷 구조
+- hash index 계산
+- collision 처리
+- `set/get/delete/exists`
+- load factor 기준 resize
+
+제외:
+
+- `store.py`, `persistence.py`, `server`, `commands`, 문서 수정 금지
+
+##### B. Store / Persistence
+
+목표:
+
+- `HashTable` 위에 `Store`를 구성하고 최소 영속성 연결
+
+담당 파일:
+
+- `src/storage/store.py`
+- `src/storage/persistence.py` 신규
+
+담당 내용:
+
+- `Store`가 내부적으로 `HashTable`을 사용하도록 교체
+- TTL 상태 관리
+- `AOF-lite` append/replay
+- 시작 시 복구 흐름 연결
+- 영속성 관련 환경변수 키 정의 초안
+
+제외:
+
+- `server`, `commands`, smoke 스크립트, README 대수정 금지
+
+##### C. Server / Command Stability
+
+목표:
+
+- 새 저장소 구조 위에서 서버와 명령 계층 안정성 보완
+
+담당 파일:
+
+- `src/server/tcp_server.py`
+- `src/commands/handler.py`
+
+담당 내용:
+
+- `StoreProtocol` 기준으로 handler 연결 유지
+- persistence 대상 쓰기 명령 흐름 정리
+- 연결 종료, 예외 처리, 반복 요청 처리 안정화
+- 잘못된 입력과 에러 응답 일관성 보강
+
+제외:
+
+- `HashTable` 내부 구현, `persistence.py`, README 수정 금지
+
+##### D. Docs / Ops / Smoke Preparation
+
+목표:
+
+- 새 구조를 실제 사용 가능하게 정리하고 최종 통합 준비
+
+담당 파일:
+
+- `README.md`
+- `docs/testing.md`
+- `.env.example`
+- `scripts/smoke_test.py`
+
+담당 내용:
+
+- persistence 포함 실행 방법 문서화
+- 운영/복구 절차 정리
+- smoke 시나리오 갱신 초안
+- 최종 통합 테스트 체크리스트 정리
+
+제외:
+
+- 핵심 자료구조, `store.py`, `server`, `commands` 수정 금지
+
+#### Cycle 3 Anti-Conflict Guideline
+
+- A는 `src/storage/hash_table.py`만 소유한다.
+- B는 `src/storage/store.py`, `src/storage/persistence.py`만 소유한다.
+- C는 `src/server/tcp_server.py`, `src/commands/handler.py`만 소유한다.
+- D는 문서, env, smoke 스크립트만 소유한다.
+- `tests/` 디렉터리의 대규모 수정은 마지막 공동 통합 단계에서만 수행한다.
+- 공용 인터페이스가 바뀌면 구현 전에 문서와 팀 합의를 먼저 갱신한다.
+
+#### Cycle 3 Integration Order
+
+1. 팀이 `HashTable` 방식과 `StoreProtocol`을 먼저 합의한다.
+2. A가 `hash_table.py` 기본 구현을 완료한다.
+3. B가 `store.py`와 `persistence.py`를 붙인다.
+4. C가 새 store 계약 기준으로 server/handler 안정화를 진행한다.
+5. D가 실행 문서, env, smoke 시나리오 초안을 정리한다.
+6. 각자 최소 자기 점검만 마친 뒤 `dev` 대상으로 PR을 올린다.
+7. 마지막에 팀이 함께 통합 테스트를 수행하고 `tests/`를 정리한다.
+8. 통합 테스트 통과 후 `dev` 기준으로 안정화하고 다음 승격 단계를 진행한다.
+
+#### Cycle 3 Final Group Test Checklist
+
+마지막 공동 테스트에서는 아래 항목을 함께 확인한다.
+
+- 기본 명령 `SET/GET/DEL`이 기존과 동일하게 동작하는지
+- 충돌이 발생하는 key 상황에서도 값이 유지되는지
+- resize 이후에도 데이터가 보존되는지
+- TTL이 있는 키가 기대대로 만료되는지
+- 서버 재시작 후 데이터가 복구되는지
+- 잘못된 RESP와 끊긴 연결에서 서버가 죽지 않는지
+- 최종 smoke 시나리오와 README 실행법이 실제 코드와 맞는지
 
 ## Definition of Done
 
