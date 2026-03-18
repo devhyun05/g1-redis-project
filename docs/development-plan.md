@@ -494,10 +494,16 @@ Cycle 2 우선 작업 순서는 아래를 따른다.
 산출물:
 
 - `src/storage/hash_table.py` 기반 커스텀 해시테이블
-- `src/storage/persistence.py` 기반 최소 영속성
+- `src/storage/aof.py` 기반 최소 영속성
 - 재시작 후 복구 가능한 store
 - 안정화된 server/command 경로
 - 최종 smoke 시나리오와 운영 문서
+
+현재 상태 메모:
+
+- 최소 `AOF-lite`는 이미 `dev` 기준 코드에 반영되어 있다.
+- 현재 구현 파일은 `src/storage/persistence.py`가 아니라 `src/storage/aof.py`다.
+- 현재 범위는 성공한 쓰기 명령 append와 시작 시 replay까지이며, TTL 만료 정보 영속화와 rewrite/compaction은 아직 범위 밖이다.
 
 #### Cycle 3 공동 설계 선행사항
 
@@ -562,7 +568,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 
 제외:
 
-- `store.py`, `persistence.py`, `server`, `commands`, 문서 수정 금지
+- `store.py`, `aof.py`, `server`, `commands`, 문서 수정 금지
 
 ##### B. Store / Persistence
 
@@ -573,7 +579,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 담당 파일:
 
 - `src/storage/store.py`
-- `src/storage/persistence.py` 신규
+- `src/storage/aof.py`
 
 담당 내용:
 
@@ -607,7 +613,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 
 제외:
 
-- `HashTable` 내부 구현, `persistence.py`, README 수정 금지
+- `HashTable` 내부 구현, `aof.py`, README 수정 금지
 
 ##### D. Docs / Ops / Smoke Preparation
 
@@ -636,7 +642,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 #### Cycle 3 Anti-Conflict Guideline
 
 - A는 `src/storage/hash_table.py`만 소유한다.
-- B는 `src/storage/store.py`, `src/storage/persistence.py`만 소유한다.
+- B는 `src/storage/store.py`, `src/storage/aof.py`만 소유한다.
 - C는 `src/server/tcp_server.py`, `src/commands/handler.py`만 소유한다.
 - D는 문서, env, smoke 스크립트만 소유한다.
 - `tests/` 디렉터리의 대규모 수정은 마지막 공동 통합 단계에서만 수행한다.
@@ -646,7 +652,7 @@ Cycle 3에서는 충돌을 줄이기 위해 역할을 파일 축으로 고정한
 
 1. 팀이 `HashTable` 방식과 `StoreProtocol`을 먼저 합의한다.
 2. A가 `hash_table.py` 기본 구현을 완료한다.
-3. B가 `store.py`와 `persistence.py`를 붙인다.
+3. B가 `store.py`와 `aof.py`를 붙인다.
 4. C가 새 store 계약 기준으로 server/handler 안정화를 진행한다.
 5. D가 실행 문서, env, smoke 시나리오 초안을 정리한다.
 6. 각자 최소 자기 점검만 마친 뒤 `dev` 대상으로 PR을 올린다.
