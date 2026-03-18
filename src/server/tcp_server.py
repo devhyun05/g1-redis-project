@@ -12,6 +12,7 @@ ParserFunc = Callable[[bytes], list[str]]
 CommandHandlerFunc = Callable[[list[str], Any], Any]
 EncoderFunc = Callable[[Any], bytes]
 PersistCommandFunc = Callable[[list[str], Any], None]
+RecordRequestFunc = Callable[[list[str]], None]
 FrameStatus = Literal["complete", "incomplete", "malformed"]
 
 CRLF = b"\r\n"
@@ -34,6 +35,7 @@ class TcpServer:
         encode_response: EncoderFunc,
         store: Any,
         persist_command: PersistCommandFunc | None = None,
+        record_request: RecordRequestFunc | None = None,
         read_size: int = 4096,
         log_requests: bool = True,
         logger: logging.Logger | None = None,
@@ -45,6 +47,7 @@ class TcpServer:
         self.encode_response = encode_response
         self.store = store
         self.persist_command = persist_command
+        self.record_request = record_request
         self.read_size = read_size
         self.log_requests = log_requests
         self.logger = logger or logging.getLogger("mini_redis.server")
@@ -136,6 +139,8 @@ class TcpServer:
 
                     try:
                         tokens = self.parse_request(extraction.frame)
+                        if self.record_request is not None:
+                            self.record_request(tokens)
                         response = self.handle_command(tokens, self.store)
                         if isinstance(response, dict):
                             response_type = str(response.get("type", "unknown"))

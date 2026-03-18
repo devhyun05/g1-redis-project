@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,6 +12,7 @@ from src.commands.handler import handle_command
 from src.protocol.parser import parse_request
 from src.protocol.writer import encode_response
 from src.server.tcp_server import TcpServer
+from src.server.traffic_stats import TrafficStats
 from src.storage.aof import AppendOnlyFile, MUTATING_COMMANDS
 from src.storage.store import Store
 
@@ -27,6 +29,29 @@ ENV_AOF_PATH_KEY = "AOF_PATH"
 ENV_LOG_LEVEL_KEY = "LOG_LEVEL"
 ENV_LOG_REQUESTS_KEY = "LOG_REQUESTS"
 DEFAULT_LOG_LEVEL = "INFO"
+
+BANNER = r"""
+                mini -
+
+██████╗ ███████╗██████╗ ██╗███████╗
+██╔══██╗██╔════╝██╔══██╗██║██╔════╝
+██████╔╝█████╗  ██║  ██║██║███████╗
+██╔══██╗██╔══╝  ██║  ██║██║╚════██║
+██║  ██║███████╗██████╔╝██║███████║
+╚═╝  ╚═╝╚══════╝╚═════╝ ╚═╝╚══════╝
+
+       small name, big latency saving -
+""".strip("\n")
+
+INFO_CARD = """
++----------------------------------+
+|  REDIS MINI SERVER               |
+|  Mode        : demo              |
+|  Protocol    : TCP / RESP        |
+|  Storage     : In-memory + AOF   |
+|  Commands    : PING SET GET INCR |
++----------------------------------+
+""".strip("\n")
 
 
 def load_dotenv(path: Path = Path(".env")) -> None:
@@ -75,6 +100,7 @@ async def run_server() -> None:
     log_requests = _load_bool_env(ENV_LOG_REQUESTS_KEY, default=True)
     store = Store()
     aof = AppendOnlyFile(aof_path) if aof_enabled else None
+    traffic_stats = TrafficStats(aof_enabled=aof_enabled)
 
     if aof is not None:
         aof.replay(store, handle_command)
@@ -87,6 +113,7 @@ async def run_server() -> None:
         encode_response=encode_response,
         store=store,
         persist_command=_persist_command(aof),
+        record_request=traffic_stats.record_request,
         read_size=read_buffer_size,
         log_requests=log_requests,
     )
@@ -105,10 +132,18 @@ async def run_server() -> None:
             separators=(",", ":"),
         )
     )
+    print(BANNER)
+    print(INFO_CARD)
     print(f"Mini Redis server listening on {host}:{port}")
+    traffic_task = asyncio.create_task(_display_traffic(traffic_stats))
     try:
         await server.serve_forever()
     finally:
+        traffic_task.cancel()
+        try:
+            await traffic_task
+        except asyncio.CancelledError:
+            pass
         await server.shutdown()
 
 
@@ -131,6 +166,31 @@ def _persist_command(aof: AppendOnlyFile | None) -> Callable[[list[str], Any], N
             aof.append(tokens)
 
     return persist
+
+
+async def _display_traffic(traffic_stats: TrafficStats) -> None:
+    previous_length = 0
+
+    try:
+        while True:
+            line = traffic_stats.render_status_line()
+            previous_length = _write_status_line(line, previous_length)
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        if previous_length > 0:
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        raise
+
+
+def _write_status_line(line: str, previous_length: int) -> int:
+    padded_line = line
+    if len(line) < previous_length:
+        padded_line += " " * (previous_length - len(line))
+
+    sys.stdout.write(f"\r{padded_line}")
+    sys.stdout.flush()
+    return len(line)
 
 
 def main() -> None:
