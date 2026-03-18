@@ -1,0 +1,4 @@
+mysqladmin: connect to server at '127.0.0.1' failed
+error: 'Can't connect to MySQL server on '127.0.0.1:3306' (1)'
+Check that mysqld is running on 127.0.0.1 and that the port is 3306.
+You can check this by doing 'telnet 127.0.0.1 3306'

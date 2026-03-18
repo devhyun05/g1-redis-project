@@ -26,6 +26,7 @@ ENV_PORT_KEY = "REDIS_PORT"
 ENV_READ_BUFFER_SIZE_KEY = "READ_BUFFER_SIZE"
 ENV_AOF_ENABLED_KEY = "AOF_ENABLED"
 ENV_AOF_PATH_KEY = "AOF_PATH"
+ENV_TRAFFIC_STATS_ENABLED_KEY = "TRAFFIC_STATS_ENABLED"
 ENV_LOG_LEVEL_KEY = "LOG_LEVEL"
 ENV_LOG_REQUESTS_KEY = "LOG_REQUESTS"
 DEFAULT_LOG_LEVEL = "INFO"
@@ -97,10 +98,11 @@ async def run_server() -> None:
     configure_logging()
 
     host, port, read_buffer_size, aof_enabled, aof_path = load_server_config()
+    traffic_stats_enabled = _load_bool_env(ENV_TRAFFIC_STATS_ENABLED_KEY, default=True)
     log_requests = _load_bool_env(ENV_LOG_REQUESTS_KEY, default=True)
     store = Store()
     aof = AppendOnlyFile(aof_path) if aof_enabled else None
-    traffic_stats = TrafficStats(aof_enabled=aof_enabled)
+    traffic_stats = TrafficStats(aof_enabled=aof_enabled) if traffic_stats_enabled else None
 
     if aof is not None:
         aof.replay(store, handle_command)
@@ -113,7 +115,7 @@ async def run_server() -> None:
         encode_response=encode_response,
         store=store,
         persist_command=_persist_command(aof),
-        record_request=traffic_stats.record_request,
+        record_request=traffic_stats.record_request if traffic_stats is not None else None,
         read_size=read_buffer_size,
         log_requests=log_requests,
     )
@@ -127,6 +129,7 @@ async def run_server() -> None:
                 "port": port,
                 "read_buffer_size": read_buffer_size,
                 "aof_enabled": aof_enabled,
+                "traffic_stats_enabled": traffic_stats_enabled,
                 "log_requests": log_requests,
             },
             separators=(",", ":"),
@@ -135,15 +138,20 @@ async def run_server() -> None:
     print(BANNER)
     print(INFO_CARD)
     print(f"Mini Redis server listening on {host}:{port}")
-    traffic_task = asyncio.create_task(_display_traffic(traffic_stats))
+    traffic_task = (
+        asyncio.create_task(_display_traffic(traffic_stats))
+        if traffic_stats is not None
+        else None
+    )
     try:
         await server.serve_forever()
     finally:
-        traffic_task.cancel()
-        try:
-            await traffic_task
-        except asyncio.CancelledError:
-            pass
+        if traffic_task is not None:
+            traffic_task.cancel()
+            try:
+                await traffic_task
+            except asyncio.CancelledError:
+                pass
         await server.shutdown()
 
 

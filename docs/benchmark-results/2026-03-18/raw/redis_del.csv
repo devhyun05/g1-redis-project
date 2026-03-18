@@ -1,0 +1,2 @@
+"test","rps","avg_latency_ms","min_latency_ms","p50_latency_ms","p95_latency_ms","p99_latency_ms","max_latency_ms"
+"DEL key:__rand_int__","88888.89","0.466","0.112","0.415","0.823","1.767","9.583"

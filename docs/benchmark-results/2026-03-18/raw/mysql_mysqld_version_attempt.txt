@@ -1,0 +1,3 @@
+dyld[17015]: Library not loaded: /opt/homebrew/opt/icu4c/lib/libicuuc.73.dylib
+  Referenced from: <BF143B44-B63D-3D6E-855B-DF1F670ACE4D> /opt/homebrew/Cellar/mysql/8.3.0/bin/mysqld
+  Reason: tried: '/opt/homebrew/opt/icu4c/lib/libicuuc.73.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/opt/icu4c/lib/libicuuc.73.dylib' (no such file), '/opt/homebrew/opt/icu4c/lib/libicuuc.73.dylib' (no such file), '/opt/homebrew/Cellar/icu4c/74.2/lib/libicuuc.73.dylib' (no such file), '/System/Volumes/Preboot/Cryptexes/OS/opt/homebrew/Cellar/icu4c/74.2/lib/libicuuc.73.dylib' (no such file), '/opt/homebrew/Cellar/icu4c/74.2/lib/libicuuc.73.dylib' (no such file)

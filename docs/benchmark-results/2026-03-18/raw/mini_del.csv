@@ -1,0 +1,3 @@
+WARNING: Could not fetch server CONFIG
+"test","rps","avg_latency_ms","min_latency_ms","p50_latency_ms","p95_latency_ms","p99_latency_ms","max_latency_ms"
+"DEL key:__rand_int__","72727.27","0.658","0.328","0.647","0.831","0.999","1.359"
