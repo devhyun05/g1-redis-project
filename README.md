@@ -99,7 +99,7 @@ Python 프로젝트의 실제 구현은 `python -m`, `pytest`, 패키지 매니�
 Docker 명령:
 
 - `make test-docker`: 컨테이너 안에서 `pytest`와 `ruff`를 실행한다.
-- `make smoke-docker`: 서버 컨테이너를 띄운 뒤 별도 컨테이너에서 smoke pytest를 실행한다.
+- `make smoke-docker`: `AOF_ENABLED=true` 서버 컨테이너를 띄운 뒤 별도 컨테이너에서 기본 smoke와 TTL 재시작 복구 시나리오를 실행한다.
 
 ## EC2 Deployment (Docker)
 
@@ -229,6 +229,48 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 - storage 레벨 TTL 테스트에서 `expire(key, seconds)` 적용 후 만료 시간이 지나면 `get(key)`가 `None`을 반환하는 것을 확인했다.
 - 동시성 검증으로 `100`개의 동시 클라이언트가 같은 키에 `INCR`를 수행했을 때 최종 값이 `100`으로 일관되게 유지되는 것을 확인했다.
 
+## Development Cycles
+
+![Cycle 1 to 3 development plan](docs/cycle-1-3-figma-board.svg)
+
+## Quality Control (QC)
+
+이 프로젝트의 QC는 결과물만 사후 점검하는 방식이 아니라, 설계 합의부터 테스트와 통합 검증까지 포함하는 흐름으로 운영했다.
+
+- 해시 테이블은 구현 전에 팀이 함께 충돌 해결 방식, 해시 함수, 버킷 구조, resize 규칙, TTL 책임 분리를 먼저 합의했다.
+- 설계 선택은 비교 가능한 대안 위에서 근거 기반으로 정리했다. 충돌 해결은 `separate chaining`, 해시 함수는 `FNV-1a`, 버킷 표현은 linked list 기반으로 고정하고 `open addressing`, `djb2`, 단순 hash, `SHA-256` 계열은 비교 참고안으로만 남겼다.
+- 구현 충돌을 줄이기 위해 역할을 파일 단위로 분리했다. `HashTable`, `Store/AOF`, `Server/Command`, `문서/Smoke`를 나눠 각자 책임 범위를 고정하고, 공용 인터페이스 변경은 문서와 팀 합의를 먼저 갱신하도록 했다.
+- 최종 단계에서는 팀이 함께 통합 테스트를 수행하며 collision, deterministic hash, resize 후 데이터 보존, TTL 만료, malformed RESP, broken AOF, README 실행 절차 일치 여부까지 체크리스트로 검증했다.
+
+QC의 핵심 축은 아래 4단계 테스트다.
+
+1. Local Automated Tests: 단위 테스트, 명령 처리 테스트, 핵심 회귀 테스트를 빠르게 반복 실행한다.
+2. Local Smoke Tests: 실제 서버를 띄워 TCP/RESP 왕복, 연결 가능 여부, 비정상 입력에서의 안정성을 확인한다.
+3. Docker Automated Tests: 컨테이너 환경에서 의존성, 실행 환경, 패키징 문제를 조기에 점검한다.
+4. Docker Smoke Tests: 배포와 유사한 환경에서 서버 기동, 기본 명령, TTL 및 재시작 복구 시나리오를 검증한다.
+
+실제 테스트도 자료구조와 런타임 경계까지 세분화해 운영했다.
+
+- `tests/unit/test_hash_table.py`: collision key 조회/삭제, deterministic index, resize 후 값 보존 검증
+- `tests/unit/test_store.py`: `HashTable` 백엔드 연결, TTL 전후 동작, 만료 후 삭제/조회 규약, resize 이후 데이터 유지 검증
+- `tests/integration/test_server_connection.py`: 단일 연결 다중 요청, partial request, protocol error 이후 연결 유지, 재접속 안정성 검증
+- `tests/smoke/test_server_smoke.py`: 실제 서버 round-trip smoke 검증
+
+PR 전에는 관련 자동 테스트와 스모크 테스트 통과를 기본 게이트로 삼고, 실행 경로나 컨테이너 환경에 영향이 있는 변경은 Docker 기준 테스트까지 확인했다. CI도 같은 실행 계약을 따라 로컬 검증 흐름을 재현하도록 맞췄다.
+
+## How We Used AI
+
+이 프로젝트에서 AI는 단순 코드 생성기가 아니라, 협업 속도와 통합 안정성을 높이는 실무 도구로 활용했다.
+
+- `docs/ai-prompts.md`에 프롬프트 스니펫을 미리 정리해 두고, 기능 구현, 테스트, CI 대응, 문서 작성 때 같은 입력 형식을 재사용했다.
+- 프롬프트에서는 요청 사항과 금지 사항을 명확히 구분해 AI가 범위를 임의 확장하거나 불필요한 수정을 하지 않도록 유도했다.
+- `AGENTS.md`를 기준 문서로 두고 필수 읽기 순서, 문서 우선순위, 테스트 규칙, 출력 형식을 먼저 읽게 해 작업 시작점을 통일했다.
+- 배포, 개발, 문서화, 학습처럼 역할별로 스레드와 에이전트를 분리해 동시에 사용했고, 파일 경계 중심으로 나눠 merge conflict를 줄였다.
+- 새로운 개념도 따로 외우기보다 RESP, TTL, AOF, HashTable처럼 실제 프로젝트 코드와 테스트에 적용된 형태로 바로 이해하고 확인하면서 학습했다.
+- 팀원들 피드백 기준으로도 프롬프트 입력 방식이 협업에 큰 도움이 됐고, 특히 머지 충돌 감소와 AI 동작 제어 측면에서 효과가 컸다.
+
+![AI-assisted work timeline](docs/ai-work-timeline.svg)
+
 ## Selected Collaboration Skills
 
 현재 저장소에서 협업용으로 우선 사용하는 Codex 스킬은 아래 두 개다.
@@ -255,10 +297,10 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 ## Recent Notes
 
 - AOF(Append Only File) 영속성 초안을 추가했다.
-- 현재는 `SET`, `DEL`, `INCR`, `DECR` 같은 상태 변경 명령만 RESP 형식으로 append한다.
-- 서버 시작 시 AOF 파일을 replay해 메모리 상태를 복구한다.
-- TTL 만료 정보는 이번 AOF 범위에 포함하지 않았고, 추후 `EXPIRE/EXPIREAT` wiring과 함께 보강할 예정이다.
-- Docker 기반 재시작 복구 테스트(`SET -> 컨테이너 restart -> GET`)를 수행했고, 재시작 후에도 저장한 key가 복구되는 것을 확인했다.
+- 현재는 `SET`, `DEL`, `INCR`, `DECR`와 성공한 `EXPIRE`를 RESP 형식으로 append한다.
+- 서버 시작 시 AOF 파일을 replay해 메모리 상태를 복구하고, TTL은 절대 만료 시각 기반으로 남은 시간을 유지한다.
+- `EXPIRE`는 공개 RESP 계약으로 유지하고, AOF 내부에서는 synthetic `EXPIREAT` 레코드로 deadline을 기록한다.
+- Docker 기반 재시작 복구 테스트(`SET -> EXPIRE -> 컨테이너 restart -> GET -> deadline 경과 후 GET null`)를 수행했고, 재시작 후에도 남은 TTL 기준으로 key가 만료되는 것을 확인했다.
 - `redis-cli --raw -h <HOST> -p <PORT> get <KEY>` 또는 raw RESP 응답 기준으로 복구 결과를 검증했다.
 - Cycle 3 기준 `Store` 내부 저장 구조를 커스텀 `HashTable`로 연결했다.
 - TTL 메타데이터는 계속 `Store` 계층에서 관리하고, 실제 key-value 저장은 `HashTable`이 담당한다.

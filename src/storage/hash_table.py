@@ -80,11 +80,12 @@ class HashTable:
 
         return None
 
-    def _hash(self, key: str) -> int:
-        hashed_value = FNV_64_OFFSET_BASIS
-        for byte in key.encode("utf-8"):
-            hashed_value ^= byte
-            hashed_value = (hashed_value * FNV_64_PRIME) & 0xFFFFFFFFFFFFFFFF
+# 해시 함수: FNV-1a 64bit
+    def _hash(self, key: str) -> int: # 문자열 key를 받아서 정수 해시값을 반환
+        hashed_value = FNV_64_OFFSET_BASIS # 알고리즘의 고정 시작값
+        for byte in key.encode("utf-8"): # utf-8 8 바이트 변환
+            hashed_value ^= byte # XOR(두 비트가 다르면 1, 같으면 0) 연산자로 새 해시값 계산 후 재대입
+            hashed_value = (hashed_value * FNV_64_PRIME) & 0xFFFFFFFFFFFFFFFF # 해시값*프라임소수. 정수크기 제한(하위 64비트)
         return hashed_value
 
     def _index_for(self, key: str, bucket_count: int | None = None) -> int:
@@ -101,6 +102,9 @@ class HashTable:
             current = bucket
             while current is not None:
                 new_index = self._index_for(current.key, bucket_count)
+                # 새 버킷 슬롯의 맨 앞에 노드를 삽입(head insertion).
+                # next=new_buckets[new_index]로 기존 체인을 뒤로 밀어내고
+                # 새 노드가 그 슬롯의 첫 번째 노드가 된다.
                 new_buckets[new_index] = HashNode(
                     key=current.key,
                     value=current.value,
