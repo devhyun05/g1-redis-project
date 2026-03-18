@@ -38,28 +38,28 @@
 
 ### 2. 아키텍처 경계
 
-- `bootstrap`, `protocol`, `commands`, `storage`, `config`, `logging`, `tests`를 1차 모듈 경계로 둔다.
+- `main`, `server`, `protocol`, `commands`, `storage`, `tests`, `scripts`를 1차 경계로 둔다.
 - 공용 인터페이스를 먼저 얇게 정의하고, 구현은 각 역할이 병렬로 진행한다.
+- Cycle 1에서는 `bootstrap`, `config`, `logging`처럼 향후 분리 가능한 관심사는 별도 폴더로 먼저 쪼개지 않는다.
 
 ### 3. 폴더 구조
 
 우선안:
 
 - `src/`
-- `src/<package>/bootstrap/`
-- `src/<package>/protocol/`
-- `src/<package>/commands/`
-- `src/<package>/storage/`
-- `src/<package>/config/`
-- `src/<package>/logging/`
+- `src/main.py`
+- `src/server/`
+- `src/protocol/`
+- `src/commands/`
+- `src/storage/`
 - `tests/unit/`
 - `tests/integration/`
 - `tests/smoke/`
-- `docker/`
 - `scripts/`
+- `.env.example`
 - `docs/`
 
-패키지 이름과 실제 하위 구조는 팀 피드백으로 최종 정한다.
+Cycle 1에서는 폴더 수를 줄여 진입 비용을 낮추고, Cycle 2 이후 구조가 커질 때만 세부 폴더를 추가한다.
 
 ### 4. 프로토콜 및 명령 컨벤션
 
@@ -86,8 +86,9 @@
 
 ### 7. 역할 분담
 
-- 4인 역할은 런타임/설정, 프로토콜/연결, 명령/저장소, 테스트/CI/문서로 나눈다.
+- 4인 역할은 서버 진입점, 프로토콜, 명령, 저장소/테스트로 나눈다.
 - 공용 인터페이스 변경은 담당자 단독 결정이 아니라 문서 반영과 함께 공유한다.
+- 폴더 소유권이 겹치는 상황을 줄이기 위해 Cycle 1에서는 담당 폴더를 최대한 분리한다.
 - 사이클 끝에서는 수직 슬라이스 기준으로 함께 마감한다.
 
 ## Branch and Merge Flow
@@ -102,47 +103,68 @@
 
 4인 기본 역할은 아래처럼 나눈다.
 
-### A. Runtime and Configuration
+### A. Runtime and Server Entrypoint
+
+- `src/main.py`
+- `src/server/`
+- `.env.example`
+- README 실행 경로 동기화
+
+책임:
 
 - 서버 진입점
-- 프로세스 시작/종료 흐름
-- 환경변수 및 설정 로딩
-- 로컬 실행, Docker 실행 기반 정리
+- 소켓 서버 생성과 종료 흐름
+- 환경변수 로딩 위치 정리
+- 로컬 실행 명령 정리
 
-### B. Protocol and Connection Handling
+### B. Protocol and RESP I/O
 
-- 클라이언트 연결 처리
-- 요청 파싱
+- `src/protocol/`
+
+책임:
+
+- RESP 최소 서브셋 파싱
 - 응답 직렬화
 - 잘못된 입력 처리
+- 명령 토큰 정규화
 
-### C. Command and Storage
+### C. Command Handling
 
-- 핵심 명령 구현
-- 상태 저장 구조
-- 명령 실행 흐름
-- 최소 데이터 일관성 보장
+- `src/commands/`
 
-### D. Tests, CI, and Docs
+책임:
 
-- 자동 테스트
-- 스모크 테스트
-- CI 연결
-- 문서 동기화
+- 명령 라우팅
+- `PING`, `SET`, `GET`, `DEL` 처리
+- 인자 검증
+- storage 호출 규약 유지
 
-기본 담당은 나누되, 각 사이클에서는 end-to-end 완료를 위해 필요한 수직 슬라이스를 함께 마감한다.
+### D. Storage and Verification
+
+- `src/storage/`
+- `tests/`
+- `scripts/`
+
+책임:
+
+- 최소 key-value 저장소
+- 단위/통합/스모크 테스트
+- smoke 스크립트
+- 통합 체크포인트 보조
+
+기본 담당은 폴더 단위로 나누되, end-to-end 마감 시점에는 인접 모듈과 함께 최종 연결을 책임진다.
 
 ## Module Boundaries
 
 별도 `architecture.md`는 아직 두지 않고, 현재는 아래 경계를 기준으로 작업한다.
 
-- `server/bootstrap`: 실행 진입점, 설정 로드, 서버 생명주기
-- `protocol`: 입력 파싱, 요청/응답 포맷, 연결 처리
+- `main.py`: 환경변수 로드, 서버 시작, 최상위 wiring
+- `server`: TCP 서버 생성, 연결 수락, 클라이언트 세션 생명주기
+- `protocol`: 입력 파싱, 요청 토큰화, RESP 응답 작성
 - `commands`: 명령 라우팅과 비즈니스 규칙
 - `storage`: 키-값 저장과 상태 관리
-- `config`: 환경변수, 런타임 설정
-- `logging`: 애플리케이션 로그 출력
 - `tests`: 단위, 통합, 스모크 테스트
+- `scripts`: 수동 검증과 smoke 실행 보조
 
 공용 인터페이스를 바꾸면 관련 문서를 먼저 또는 함께 갱신한다.
 
@@ -150,17 +172,17 @@
 
 Cycle 1에서는 모든 내부 구조를 먼저 설계하지 않고, 팀이 병렬 작업에 필요한 최소 접점만 고정한다.
 
-- Runtime 계층은 `asyncio` 연결에서 읽은 바이트를 프로토콜 계층에 넘기고, 반환된 응답 바이트를 그대로 writer에 쓴다.
-- Protocol 계층은 입력 바이트를 최소 RESP 요청 단위로 파싱해 `list[str]` 또는 동등한 얇은 명령 토큰 형태로 명령 계층에 넘긴다.
+- `src/main.py`와 `src/server/`는 reader/writer를 열고 닫는 책임만 가진다.
+- Protocol 계층은 입력 바이트를 최소 RESP 요청 단위로 파싱해 `list[str]` 형태의 명령 토큰으로 바꾼다.
 - Commands 계층은 정규화된 명령 토큰을 받아 응답 객체 또는 직렬화 가능한 결과를 반환한다.
-- Storage 계층은 `GET`, `SET`, `DEL` 구현에 필요한 최소 key-value 연산만 노출한다.
-- Serializer는 명령 결과 또는 에러 결과를 RESP 응답 바이트로 변환한다.
+- Storage 계층은 `get`, `set`, `delete` 수준의 최소 연산만 노출하고 protocol 세부사항을 알지 않는다.
+- Writer는 명령 결과 또는 에러 결과를 RESP 응답 바이트로 변환한다.
 
 Cycle 1 기준 예시 시그니처는 아래 수준이면 충분하다.
 
 ```python
 def parse_request(data: bytes) -> list[str]: ...
-def execute_command(tokens: list[str]) -> Response: ...
+def handle_command(tokens: list[str], store: Store) -> Response: ...
 def encode_response(response: Response) -> bytes: ...
 ```
 
@@ -170,31 +192,31 @@ def encode_response(response: Response) -> bytes: ...
 
 Cycle 1 분업은 사람보다 변경 축을 기준으로 나눈다. 각 담당자는 우선 아래 파일 범위에서 작업하고, 공용 접점 변경이 필요하면 먼저 문서와 팀에 공유한다.
 
-### A. Runtime and Configuration
+### A. Runtime and Server Entrypoint
 
 추천 담당 파일:
 
-- `src/<package>/bootstrap/main.py`
-- `src/<package>/bootstrap/server.py`
-- `src/<package>/config/settings.py`
+- `src/main.py`
+- `src/server/tcp_server.py`
+- `.env.example`
+- README 실행 섹션
 
 핵심 책임:
 
 - 서버 시작 진입점
 - `asyncio.start_server` wiring
 - 환경변수 및 포트 설정 로딩
-- protocol handler 주입과 종료 흐름 정리
+- protocol, command, storage를 묶는 최상위 wiring
+- 서버 종료 흐름 정리
 
-이 역할은 서버 생명주기 축을 담당하므로 다른 모듈과의 직접 충돌이 적다.
+이 역할은 진입점과 서버 생명주기 축을 담당하므로 다른 도메인 로직과 직접 충돌이 적다.
 
-### B. Protocol and Connection Handling
+### B. Protocol and RESP I/O
 
 추천 담당 파일:
 
-- `src/<package>/protocol/parser.py`
-- `src/<package>/protocol/serializer.py`
-- `src/<package>/protocol/models.py`
-- 필요 시 `src/<package>/protocol/session.py`
+- `src/protocol/parser.py`
+- `src/protocol/writer.py`
 
 핵심 책임:
 
@@ -205,54 +227,51 @@ Cycle 1 분업은 사람보다 변경 축을 기준으로 나눈다. 각 담당�
 
 이 역할은 바이트 포맷과 입출력 규약을 한곳에 모아 command 구현과 분리한다.
 
-### C. Command and Storage
+### C. Command Handling
 
 추천 담당 파일:
 
-- `src/<package>/commands/router.py`
-- `src/<package>/commands/handlers.py`
-- `src/<package>/storage/memory.py`
+- `src/commands/handler.py`
 
 핵심 책임:
 
 - `PING`, `SET`, `GET`, `DEL`
 - 명령 디스패치
-- 최소 key-value 저장소 구현
-- 미지원 명령과 잘못된 인자 처리
+- 인자 검증과 에러 분기
+- storage 호출 규약 유지
 
-이 역할은 Cycle 1의 핵심 기능을 담당하지만 protocol과는 얇은 입력/출력 계약만 맞추면 된다.
+이 역할은 명령 해석에 집중하고 저장 전략 세부 구현은 직접 소유하지 않는다.
 
-### D. Tests and Integration Glue
+### D. Storage and Verification
 
 추천 담당 파일:
 
-- `tests/unit/test_parser.py`
-- `tests/unit/test_commands.py`
-- `tests/integration/test_server_roundtrip.py`
-- `tests/smoke/test_smoke_basic.py`
-- `scripts/smoke_local.py`
-- `Makefile`
+- `src/storage/store.py`
+- `tests/unit/`
+- `tests/integration/`
+- `tests/smoke/`
+- `scripts/smoke_test.py`
 
 핵심 책임:
 
-- 빠른 단위 테스트 초안
+- 최소 key-value 저장소 구현
+- storage 회귀 테스트
 - 최소 round-trip 통합 테스트
 - 로컬 smoke 실행 경로
-- README 실행 절차 동기화
 
-이 역할은 구현을 직접 많이 소유하기보다 공용 계약이 실제로 붙는지 빠르게 검증하는 역할이다.
+이 역할은 storage 폴더와 검증 폴더를 묶어 command 담당자와의 파일 충돌을 줄이면서 통합 품질을 지키는 역할이다.
 
 ## Cycle 1 Integration Order
 
 Cycle 1 당일 통합은 처음부터 전체를 붙이지 않고, 아래 순서로 작은 접점을 닫아 가는 방식으로 진행한다.
 
 1. 시작 전에 명령 토큰 형식, 응답 형식, 에러 표현에 대한 얇은 계약을 문서와 채팅에 다시 맞춘다.
-2. Runtime 담당은 fake protocol handler로 서버 기동과 연결 수락만 먼저 확인한다.
-3. Protocol 담당은 fake command executor를 사용해 parser와 serializer가 최소 요청/응답을 처리하는지 확인한다.
-4. Command 담당은 protocol 없이 토큰 입력만으로 `PING`, `SET`, `GET`, `DEL`을 검증한다.
-5. Test 담당은 위 계약을 기준으로 단위 테스트와 최소 round-trip 테스트 뼈대를 만든다.
-6. 중간 체크포인트에서 protocol과 command를 먼저 연결해 `PING` 왕복을 맞춘다.
-7. 이후 `SET`, `GET`, `DEL`을 순서대로 연결하고, 마지막에 실제 서버를 띄워 smoke 시나리오를 함께 확인한다.
+2. Runtime 담당은 fake handler를 연결한 상태에서 서버 기동과 연결 수락만 먼저 확인한다.
+3. Protocol 담당은 fake command handler를 사용해 parser와 writer가 최소 요청/응답을 처리하는지 확인한다.
+4. Command 담당은 fake store를 사용해 `PING`, `SET`, `GET`, `DEL`과 에러 분기를 검증한다.
+5. Storage 담당은 `get`, `set`, `delete` 계약을 확정하고 storage 단위 테스트와 smoke 스크립트 뼈대를 만든다.
+6. 중간 체크포인트에서 command와 storage를 먼저 붙여 명령 결과 형식을 고정한다.
+7. 이후 protocol과 command를 붙여 `PING` 왕복을 맞추고, 마지막에 runtime을 연결해 실제 서버 smoke를 확인한다.
 8. 통합 중 계약 변경이 생기면 코드만 임시 수정하지 말고 이 문서와 테스트를 함께 갱신한다.
 
 ## Draft Folder Structure
@@ -261,23 +280,27 @@ Cycle 1 당일 통합은 처음부터 전체를 붙이지 않고, 아래 순서�
 
 ```text
 src/
-  <package>/
-    bootstrap/
-    protocol/
-    commands/
-    storage/
-    config/
-    logging/
+  main.py
+  server/
+    tcp_server.py
+  protocol/
+    parser.py
+    writer.py
+  commands/
+    handler.py
+  storage/
+    store.py
 tests/
   unit/
   integration/
   smoke/
-docker/
 scripts/
+  smoke_test.py
+.env.example
 docs/
 ```
 
-패키지 이름과 파일 세분화는 팀 피드백 후 조정한다.
+Cycle 1에서는 위 구조를 기본안으로 사용하고, Cycle 2 이후 필요가 생기면 `config`, `logging`, `docker` 등을 별도 폴더로 분리한다.
 
 ## Draft Protocol Conventions
 
@@ -286,6 +309,7 @@ docs/
 - 명령어 해석 전 공백/케이스 정규화를 담당 계층에서 처리한다.
 - 에러는 가능한 한 RESP 에러 응답 형식으로 반환한다.
 - 로그는 프로토콜 응답과 섞지 않는다.
+- 로컬 개발용 환경값은 `.env`에서 읽을 수 있게 하되, 저장소에는 `.env.example`만 포함한다.
 
 ## Cycle Plan
 

@@ -6,11 +6,12 @@
 
 변경을 시작하기 전에 아래 문서를 순서대로 읽는다.
 
-1. `README.md`
-2. `docs/development-plan.md`
-3. `docs/testing.md`
-4. `docs/commit-convention.md`
-5. `docs/ai-prompts.md`
+1. `AGENTS.md`
+2. `README.md`
+3. `docs/development-plan.md`
+4. `docs/testing.md`
+5. `docs/commit-convention.md`
+6. `docs/ai-prompts.md`
 
 문서를 읽지 않은 상태에서 구현을 시작하지 않는다.
 
@@ -18,11 +19,12 @@
 
 해석 우선순위는 아래 순서를 따른다.
 
-1. `README.md`
-2. `docs/development-plan.md`
-3. `docs/testing.md`
-4. `docs/commit-convention.md`
-5. 코드와 기존 구현
+1. `AGENTS.md`
+2. `README.md`
+3. `docs/development-plan.md`
+4. `docs/testing.md`
+5. `docs/commit-convention.md`
+6. 코드와 기존 구현
 
 문서와 코드가 다르면 바로 임의 수정하지 말고, 어떤 쪽이 최신 기준인지 확인한 뒤 문서 또는 코드를 함께 맞춘다.
 
