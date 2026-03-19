@@ -218,11 +218,11 @@ printf '*2\r\n$3\r\nDEL\r\n$1\r\nk\r\n' | nc 127.0.0.1 6381
 ## Stress Test Notes
 
 - `redis-benchmark` 기준으로 `PING`, `SET`, `GET`에 대해 소/중/대 부하 테스트를 수행했다.
-- 최대 검증 조건: `100000 requests`, `100 concurrent clients`
+- 최대 검증 조건: 총 `100000`개 요청, 동시 클라이언트 `100`개
 - 관측 처리량:
-  - `PING_BULK`: 약 `21.8k req/s`
-  - `SET`: 약 `6.3k req/s`
-  - `GET`: 약 `6.4k req/s`
+  - `PING_BULK`: 초당 약 `21.8k`개 요청
+  - `SET`: 초당 약 `6.3k`개 요청
+  - `GET`: 초당 약 `6.4k`개 요청
 - malformed RESP flood, partial connection hold-open, large payload 입력을 포함한 비정상 시나리오에서도 서버가 즉시 종료되거나 응답 불능 상태로 빠지지 않는 것을 확인했다.
 
 ## Performance Optimization Report (2026-03-19)
